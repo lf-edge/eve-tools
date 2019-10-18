@@ -1,12 +1,44 @@
-extern "C" {
 #include <arpa/inet.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <google/protobuf/io/coded_stream.h>
+#include <google/protobuf/io/zero_copy_stream_impl.h>
 
-int sendrecv(const char *data_to_send, int maxlen, int *length, char **resp) {
+using namespace std;
+using namespace google::protobuf::io;
+
+google::protobuf::uint32 readHdr(char *buf)
+{
+  google::protobuf::uint32 size;
+  google::protobuf::io::ArrayInputStream ais(buf,4);
+  CodedInputStream coded_input(&ais);
+  coded_input.ReadVarint32(&size);
+  cout<<"size of payload is "<<size<<endl;
+  return size;
+}
+
+int readMessage(int sock, google::protobuf::uint32 size, char **buf, int *buflen)
+{
+        int bytecount = 0;
+        char *payload = (char*) malloc(sizeof(char) * (size+4));
+        bytecount = recv(sock, (void*)payload, size+4, MSG_WAITALL);
+        if (bytecount < 0) {
+                cout << "Error reading further payload bytes" << std::endl;
+		close(sock);
+                return -1;
+        }
+	*buf = payload;
+	*buflen = bytecount;
+	close(sock);
+	return 0;
+}
+
+
+int sendrecv(const char *data_to_send, int data_len, int *length, char **resp) {
+	//TBD: Move these to #defines or arguments
 	const char* server_name = "10.1.0.1";
 	const int server_port = 8877;
 
@@ -22,46 +54,29 @@ int sendrecv(const char *data_to_send, int maxlen, int *length, char **resp) {
 	// open a stream socket
 	int sock;
 	if ((sock = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
-		printf("could not create socket\n");
-		return 1;
+		cout << "Could not create socket" << std::endl;
+		return -1;
 	}
 
-	// TCP is connection oriented, a reliable connection
-	// **must** be established before any data is exchanged
 	if (connect(sock, (struct sockaddr*)&server_address,
 	            sizeof(server_address)) < 0) {
-		printf("could not connect to server\n");
-		return 1;
+		cout << "Could not connect to server" << std::endl;
+		return -1;
 	}
 
 	// send
-
-	send(sock, data_to_send, strlen(data_to_send), 0);
+	send(sock, data_to_send, data_len, 0);
 
 	// receive
+	int bytecount = 0;
+	int hdrlen = 4;
+        char hdr_buffer[4];
+        char *pbuffer = hdr_buffer;
+        bytecount = recv(sock, pbuffer, hdrlen, MSG_PEEK);
+        if (bytecount > 0) {
+             cout << "Received new response, and parsed the hdr" << std::endl;
+             return readMessage(sock, readHdr(hdr_buffer), resp, length);
+        }
 
-	int n = 0;
-	int len = 0;
-	char *buffer = (char *)malloc(sizeof(char) * maxlen);
-	if (NULL == buffer) {
-		return -1;
-	}
-	char* pbuffer = buffer;
-
-	// will remain open until the server terminates the connection
-	while ((n = recv(sock, pbuffer, maxlen, 0)) > 0) {
-		pbuffer += n;
-		maxlen -= n;
-		len += n;
-
-		buffer[len] = '\0';
-		printf("received: '%s'\n", buffer);
-	}
-
-	// close the socket
-	close(sock);
-	*resp = buffer;
-	*length = len;
 	return 0;
-}
 }

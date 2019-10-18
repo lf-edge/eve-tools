@@ -6,9 +6,7 @@
 #include <sstream>
 
 using namespace std;
-extern "C" {
-extern int sendrecv(const char *data_to_send, int maxlen, int *length, char **resp);
-}
+extern int sendrecv(const char *data_to_send, int data_len, int *length, char **resp);
 
 enum opt_check_type {
    FILENAME = 1,
@@ -126,20 +124,58 @@ static int unit_test() {
 	return 0;
 		
 }
+
+std::string& getBaseName(std::string& str) 
+{
+	const size_t last_slash_idx = str.find_last_of("\\/");
+	if (std::string::npos != last_slash_idx)
+	{
+	    str.erase(0, last_slash_idx + 1);
+	}
+	return str;
+}
+
+
 int main (int argc, char *argv[]) {
 #ifdef UNIT_TEST
 	unit_test();
 #else
 	eve_tools::EveTPMRequest request;
-	prepare_file_mappings(argc, argv, request);
+	prepare_file_mappings(argc, (const char **) argv, request);
+	std::string toolName(argv[0]);
 	std::string output; 
+	std::string& trimmedToolName = getBaseName(toolName);
+	trimmedToolName.erase(0,1);
+	ostringstream command;
+	command << trimmedToolName;
+	for (int i=1; i <argc; i++) {
+		command <<" " << argv[i];
+	}
+	cout <<"Prepared command str is " << command.str() << std::endl;
+	request.set_command(command.str());
 	request.SerializeToString(&output);
 	int resp_length;
 	char *resp_buf;
-	int rc = sendrecv(output.c_str(), output.length(), &resp_length, &resp_buf);
+	int rc = sendrecv(output.c_str(), output.size(), &resp_length, &resp_buf);
 	if (rc != 0) {
 		cout << "Failed to send request: " << rc << std::endl;
 	}
+	eve_tools::EveTPMResponse response;
+	response.ParseFromString(resp_buf);
+	for (int i=0; i < response.outputfiles_size(); i++) {
+		const eve_tools::File& file = response.outputfiles(i);
+		cout << "Processing file: " << file.name() << std::endl;
+		ofstream output_file;
+		output_file.open(file.name(), ios::out|ios::binary);
+		if (!output_file) {
+			cout << "Unable to open file for writing: "
+			 	<< file.name() << std::endl;
+			return -1;
+		}
+		output_file << file.content();
+		output_file.close();
+	}
+	cout << response.response() << std::endl;
 #endif
 	return 0;
 }
