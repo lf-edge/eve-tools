@@ -4,6 +4,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <iostream>
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 
@@ -39,8 +40,10 @@ int readMessage(int sock, google::protobuf::uint32 size, char **buf, int *buflen
 
 int sendrecv(const char *data_to_send, int data_len, int *length, char **resp) {
 	//TBD: Move these to #defines or arguments
-	const char* server_name = "10.1.0.1";
+	const char* server_name = "172.17.0.2";
 	const int server_port = 8877;
+
+	cout << "Sending " << data_len << "bytes" << std::endl;
 
 	struct sockaddr_in server_address;
 	memset(&server_address, 0, sizeof(server_address));

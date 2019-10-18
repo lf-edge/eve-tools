@@ -4,8 +4,11 @@
 #include <string>
 #include <fstream>
 #include <sstream>
+#include <google/protobuf/io/coded_stream.h>
+#include <google/protobuf/io/zero_copy_stream_impl.h>
 
 using namespace std;
+using namespace google::protobuf::io;
 extern int sendrecv(const char *data_to_send, int data_len, int *length, char **resp);
 
 enum opt_check_type {
@@ -151,20 +154,34 @@ int main (int argc, char *argv[]) {
 	for (int i=1; i <argc; i++) {
 		command <<" " << argv[i];
 	}
-	cout <<"Prepared command str is " << command.str() << std::endl;
 	request.set_command(command.str());
-	request.SerializeToString(&output);
+	//cout << "Size of the payload before CodedStream is " << request.ByteSize() << std::endl;
+	int siz = request.ByteSize() + 4;
+	char *pkt = new char [siz];
+	google::protobuf::io::ArrayOutputStream aos(pkt,siz);
+	CodedOutputStream *coded_output = new CodedOutputStream(&aos);
+	coded_output->WriteVarint32(request.ByteSize());
+	request.SerializeToCodedStream(coded_output);
+	//request.SerializeToString(&output);
 	int resp_length;
 	char *resp_buf;
-	int rc = sendrecv(output.c_str(), output.size(), &resp_length, &resp_buf);
+	int rc = sendrecv(pkt, siz, &resp_length, &resp_buf);
 	if (rc != 0) {
 		cout << "Failed to send request: " << rc << std::endl;
 	}
 	eve_tools::EveTPMResponse response;
-	response.ParseFromString(resp_buf);
+	//cout << "Payload byte count is " << resp_length;
+        google::protobuf::io::ArrayInputStream ais(resp_buf, resp_length);
+        CodedInputStream coded_input(&ais);
+	google::protobuf::uint32 size;
+        coded_input.ReadVarint32(&size);
+        google::protobuf::io::CodedInputStream::Limit msgLimit = coded_input.PushLimit(size);
+        response.ParseFromCodedStream(&coded_input);
+        coded_input.PopLimit(msgLimit);
+	//response.ParseFromString(resp_buf);
 	for (int i=0; i < response.outputfiles_size(); i++) {
 		const eve_tools::File& file = response.outputfiles(i);
-		cout << "Processing file: " << file.name() << std::endl;
+		//cout << "Processing file: " << file.name() << std::endl;
 		ofstream output_file;
 		output_file.open(file.name(), ios::out|ios::binary);
 		if (!output_file) {
