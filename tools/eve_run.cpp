@@ -52,18 +52,24 @@ static file_mapping file_mappings[] = {
 
 
 //Helper function to check if a given string is a 
-//hex number: 0xABCD or 0XABCD, both are valid hex
-bool is_hex_notation(std::string const& s)
+//hex number: 0xABCD/0xabcd/0Xabcd/0XABCD all are valid hex
+bool isStringHex(std::string const& s)
 {
   return (s.compare(0, 2, "0x") == 0 || s.compare(0, 2, "0X") == 0)
-      && s.size() > 2
-      && s.find_first_not_of("0123456789abcdefABCDEF", 2) == std::string::npos;
+          && s.size() > 2
+          && s.find_first_not_of("0123456789abcdefABCDEF", 2) == std::string::npos;
 }
 
-int populate_file_entries (int argc, const char *argv[], eve_tools::EveTPMRequest &request, file_mapping &cmd, int opt_index)
+
+//We have got an argument that can either have a hex or a filename
+//Check if arg is hex or filename; if filename, then check if it is
+//an input file or an outpufile, and pack the protobuf accordingly.
+int populateFileEntries (int argc, const char *argv[],
+                           eve_tools::EveTPMRequest &request,
+                           file_mapping &cmd, int opt_index)
 {
     if (cmd.check_type == FILENAME && opt_index < (argc-1)) {
-        if (!is_hex_notation(string(argv[opt_index+1]))) {
+        if (!isStringHex(string(argv[opt_index+1]))) {
             if (cmd.dir == OUT) {
                 request.add_expectedfiles(argv[opt_index+1]);
             } else {
@@ -102,31 +108,37 @@ int populate_file_entries (int argc, const char *argv[], eve_tools::EveTPMReques
     return 0;
 }
 
-
-int process_cmd_opts(int argc, const char *argv[], eve_tools::EveTPMRequest &request, file_mapping &cmd)
+//We've received a command which can have filename as args
+//Check if we have actually received any filename args
+int processCmdOpts(int argc, const char *argv[],
+                   eve_tools::EveTPMRequest &request,
+                   file_mapping &cmd)
 {
-    for (int i = 1; i < argc; i++) {
+    for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], cmd.opt)) {
-            return populate_file_entries(argc, argv, request, cmd, i);
+            return populateFileEntries(argc, argv, request, cmd, i);
         }
     }
     return 0;
 }
 
-int prepare_file_mappings(int argc, const char *argv[], eve_tools::EveTPMRequest &request) {
+int prepareFileMappings(int argc, const char *argv[],
+                        eve_tools::EveTPMRequest &request)
+{
     for (int i = 0; i < sizeof(file_mappings)/sizeof(file_mapping); i++) {
-        if (strstr(argv[0], file_mappings[i].cmd)) {
-           return process_cmd_opts(argc, argv, request, file_mappings[i]);
+        if (!strcmp(argv[1], file_mappings[i].cmd)) {
+           return processCmdOpts(argc, argv, request, file_mappings[i]);
         }
     }
     return 0;
 }
 
-static int unit_test() {
+static int doUnitTest()
+{
     int argc = 3;
     const char *argv[] = {"tpm2_createek", "-t", "test.jpg" };
     eve_tools::EveTPMRequest request;
-    prepare_file_mappings(argc, argv, request);
+    prepareFileMappings(argc, argv, request);
     std::string output; 
     request.SerializeToString(&output);
     eve_tools::EveTPMRequest target;
@@ -147,30 +159,18 @@ static int unit_test() {
         
 }
 
-std::string& getBaseName(std::string& str) 
+int main (int argc, char *argv[])
 {
-    const size_t last_slash_idx = str.find_last_of("\\/");
-    if (std::string::npos != last_slash_idx)
-    {
-        str.erase(0, last_slash_idx + 1);
-    }
-    return str;
-}
-
-
-int main (int argc, char *argv[]) {
 #ifdef UNIT_TEST
-    unit_test();
+    //TBD: Have a better way of running UT. Google GTEST?
+    //for now, a poor man's unit test.
+    doUnitTest();
 #else
     eve_tools::EveTPMRequest request;
-    prepare_file_mappings(argc, (const char **) argv, request);
-    std::string toolName(argv[0]);
+    prepareFileMappings(argc, (const char **) argv, request);
     std::string output; 
-    std::string& trimmedToolName = getBaseName(toolName);
-    trimmedToolName.erase(0,1);
     ostringstream command;
-    command << trimmedToolName;
-    for (int i=1; i <argc; i++) {
+    for (int i=1; i < argc; i++) {
         command <<" " << argv[i];
     }
     request.set_command(command.str());
