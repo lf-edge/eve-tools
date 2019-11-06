@@ -1,10 +1,12 @@
+# Copyright (c) 2019 Zededa, Inc.
+# SPDX-License-Identifier: Apache-2.0
 FROM debian:9.11
-RUN apt update
-RUN apt install -y g++ make
-RUN apt install -y libprotobuf-dev libprotoc-dev protobuf-compiler
+RUN apt update && \ 
+    apt install -y g++ make libprotobuf-dev \
+                   libprotoc-dev protobuf-compiler
 ADD . /
 WORKDIR /
-RUN cp proto/api.proto .
-RUN protoc --cpp_out=cpp api.proto
-RUN make clean && make all
-RUN cp libevetools.so /usr/lib
+RUN cp proto/api.proto . && \
+    protoc --cpp_out=cpp api.proto && \
+    make clean && make all && \
+    cp libevetools.so /usr/lib
