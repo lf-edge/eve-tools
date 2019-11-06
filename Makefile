@@ -1,8 +1,22 @@
-libevetools.so: lib/src/sendrecv.cpp
-	g++ -g -shared -fPIC -o libevetools.so lib/src/sendrecv.cpp -std=c++11 -lprotobuf
-clean:
-	rm -rf client libevetools.so *.dSYM ztpm2_createek 
-ztpm2_createek: libevetools.so
-	g++ tools/ztpm2_createek.cpp cpp/api.pb.cc -I cpp/  -std=c++11 -lprotobuf -g -L . libevetools.so -o ztpm2_createek
+# Copyright (c) 2019 Zededa, Inc.
+# SPDX-License-Identifier: Apache-2.0
 
-all: libevetools.so ztpm2_createek
+TARGET ?= vtpm_server
+INC_DIRS ?= ./lib/include ./cpp
+LDLIBS := -lprotobuf -L . libevetools.so
+INC_FLAGS := $(addprefix -I,$(INC_DIRS))
+CPPFLAGS ?= $(INC_FLAGS) -std=c++11 -g
+CC = g++
+
+eve_run: libevetools.so
+	$(CC) tools/eve_run.cpp cpp/api.pb.cc $(CPPFLAGS) -o eve_run $(LDLIBS)
+
+libevetools.so: lib/src/sendrecv.cpp
+	$(CC) $(CPPFLAGS) -shared -fPIC -o libevetools.so lib/src/sendrecv.cpp -lprotobuf
+
+.PHONY: clean all
+
+clean:
+	rm -rf libevetools.so *.dSYM eve_run 
+
+all: libevetools.so eve_run 
