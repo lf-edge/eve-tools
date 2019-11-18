@@ -72,6 +72,7 @@ int populateFileEntries (int argc, const char *argv[],
                            file_mapping &cmd, int opt_index)
 {
     if (cmd.check_type == FILENAME && opt_index < (argc-1)) {
+	cout << "Checking if " << argv[opt_index+1] << " is a filename" << std::endl;
         if (!isStringHex(string(argv[opt_index+1]))) {
             if (cmd.dir == OUT) {
                 request.add_expectedfiles(argv[opt_index+1]);
@@ -130,7 +131,7 @@ int prepareFileMappings(int argc, const char *argv[],
 {
     for (int i = 0; i < sizeof(file_mappings)/sizeof(file_mapping); i++) {
         if (!strcmp(argv[1], file_mappings[i].cmd)) {
-           return processCmdOpts(argc, argv, request, file_mappings[i]);
+           processCmdOpts(argc, argv, request, file_mappings[i]);
         }
     }
     return 0;

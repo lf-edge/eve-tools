@@ -43,7 +43,7 @@ int readMessage(int sock, google::protobuf::uint32 size, char **buf, int *buflen
 
 int sendrecv(const char *data_to_send, int data_len, int *length, char **resp) {
 	//TBD: Move these to #defines or arguments
-	const char* server_name = "172.17.0.2";
+	const char* server_name = "10.1.0.1";
 	const int server_port = 8877;
 
 	cout << "Sending " << data_len << "bytes" << std::endl;
