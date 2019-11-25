@@ -17,21 +17,15 @@
 #include "hsm_client_data.h"
 #include "hsm_err.h"
 #include "hsm_log.h"
+#include "eve_tpm_service.h"
 
 
-#define EPOCH_TIME_T_VALUE          0
-#define HMAC_LENGTH                 32
-#define TPM_DATA_LENGTH             1024
+#define TPM_MAX_DATA_LENGTH 4096
 
-#if 0
-static TPM2B_AUTH      NullAuth = { .t = {0,  {0}} };
-#endif 
-static TSS_SESSION     NullPwSession;
-#if 0
-static const UINT32 TPM_20_SRK_HANDLE = HR_PERSISTENT | 0x00000001;
-static const UINT32 TPM_20_EK_HANDLE = HR_PERSISTENT | 0x00010001;
-static const UINT32 DPS_ID_KEY_HANDLE = HR_PERSISTENT | 0x00000100;
-#endif 
+static const uint32_t TPM_20_SRK_HANDLE = 0x81000001;
+static const uint32_t TPM_20_EK_HANDLE =  0x81010001;
+static const uint32_t DPS_ID_KEY_HANDLE = 0x81000100;
+
 #define SRK_PUB_FILE "/home/ubuntu/hsm/srk.pub"
 #define EK_PUB_FILE "/home/ubuntu/hsm/ek.pub"
 
@@ -78,7 +72,7 @@ log_error(const char *str)
 }
 
 #define DPS_UNMARSHAL_ARRAY(dstPtr, arrSize) \
-    DPS_UNMARSHAL(UINT32, &(arrSize));                                          \
+    DPS_UNMARSHAL(uint32_t, &(arrSize));                                          \
     printf("act_size %d < actSize %d\r\n", act_size, arrSize);   \
     if (act_size < arrSize)                                                     \
     {                                                                           \
@@ -87,8 +81,8 @@ log_error(const char *str)
     }                                                                           \
     else                            \
     {                                   \
-        dstPtr = curr_pos - sizeof(UINT16);                                         \
-        *(UINT16*)dstPtr = (UINT16)arrSize;                                         \
+        dstPtr = curr_pos - sizeof(uint16_t);                                         \
+        *(uint16_t*)dstPtr = (uint16_t)arrSize;                                         \
         curr_pos += arrSize;                         \
     }
 
@@ -135,123 +129,16 @@ read_from_file_to_buf (const char *filename, size_t *buflen, unsigned char **buf
 	fclose(fp);
 	return 0;
 }
-/**
- * Writes size bytes to a file, continuing on EINTR short writes.
- * @param f
- *  The file to write to.
- * @param data
- *  The data to write.
- * @param size
- *  The size, in bytes, of that data.
- * @return
- *  True on success, False otherwise.
- */
-static bool writex(FILE *f, UINT8 *data, size_t size) {
 
-    size_t wrote = 0;
-    size_t index = 0;
-    do {
-        wrote = fwrite(&data[index], 1, size, f);
-        if (wrote != size) {
-            if (errno != EINTR) {
-                return false;
-            }
-            /* continue on EINTR */
-        }
-        size -= wrote;
-        index += wrote;
-    } while (size > 0);
-
-    return true;
+static uint8_t* writex(uint8_t *buf, uint8_t *data, size_t size) {
+    memcpy(buf, data, size);
+    return buf + size;
 }
 
-#if 0
-/**
- * Reads size bytes from a file, continuing on EINTR short reads.
- * @param f
- *  The file to read from.
- * @param data
- *  The data buffer to read into.
- * @param size
- *  The size of the buffer, which is also the amount of bytes to read.
- * @return
- *  True on success, False otherwise.
- */
-static bool readx(FILE *f, UINT8 *data, size_t size) {
-
-    size_t bread = 0;
-    size_t index = 0;
-    do {
-        bread = fread(&data[index], 1, size, f);
-        if (bread != size) {
-            if (feof(f) || (errno != EINTR)) {
-                return false;
-            }
-            /* continue on EINTR */
-        }
-        size -= bread;
-        index += bread;
-    } while (size > 0);
-
-    return true;
-}
-#endif 
-
-static bool tpm2_util_is_big_endian(void) {
-
-    uint32_t test_word;
-    uint8_t *test_byte;
-
-    test_word = 0xFF000000;
-    test_byte = (uint8_t *) (&test_word);
-
-    return test_byte[0] == 0xFF;
-}
-
-#define STRING_BYTES_ENDIAN_CONVERT(size) \
-    UINT##size tpm2_util_endian_swap_##size(UINT##size data) { \
-    \
-        UINT##size converted; \
-        UINT8 *bytes = (UINT8 *)&data; \
-        UINT8 *tmp = (UINT8 *)&converted; \
-    \
-        size_t i; \
-        for(i=0; i < sizeof(UINT##size); i ++) { \
-            tmp[i] = bytes[sizeof(UINT##size) - i - 1]; \
-        } \
-        \
-        return converted; \
-    }
-
-STRING_BYTES_ENDIAN_CONVERT(16)
-STRING_BYTES_ENDIAN_CONVERT(32)
-//STRING_BYTES_ENDIAN_CONVERT(64)
-
-#define BE_CONVERT(value, size) \
-    do { \
-        if (!tpm2_util_is_big_endian()) { \
-            value = tpm2_util_endian_swap_##size(value); \
-        } \
-    } while (0)
-
-#define FILE_WRITE(size) \
-    bool files_write_##size(FILE *out, UINT##size data) { \
-        BAIL_ON_NULL("FILE", out); \
-        BE_CONVERT(data, size); \
-        return writex(out, (UINT8 *)&data, sizeof(data)); \
-    }
-
-
-#define FILE_READ(size) \
-    bool files_read_##size(FILE *out, UINT##size *data) { \
-            BAIL_ON_NULL("FILE", out); \
-            BAIL_ON_NULL("data", data); \
-        bool res = readx(out, (UINT8 *)data, sizeof(*data)); \
-        if (res) { \
-            BE_CONVERT(*data, size); \
-        } \
-        return res; \
-    }
+#define BUFFER_WRITE(size) \
+    uint8_t* buffer_write_##size(uint8_t *buf, uint##size##_t data) { \
+        return writex(buf, (uint8_t *)&data, sizeof(data)); \
+    } \
 
 /**
  * This is the magic for the file header. The header is organized
@@ -259,55 +146,46 @@ STRING_BYTES_ENDIAN_CONVERT(32)
  * version number. Tools can define their own, individual file
  * formats as they make sense, but they should always have the header.
  */
-static const UINT32 MAGIC = 0xBADCC0DE;
+static const uint32_t MAGIC = 0xBADCC0DE;
 
-#define BAIL_ON_NULL(param, x) \
-    do { \
-        if (!x) { \
-            LOG_ERROR(param" must be specified"); \
-            return false; \
-        } \
-    } while(0)
+BUFFER_WRITE(16)
+BUFFER_WRITE(32)
 
-/*
- * all the files_read|write_bytes_16|32|64 functions
- */
-//FILE_READ(16);
-FILE_WRITE(16)
 
-//FILE_READ(32);
-FILE_WRITE(32)
-
-//FILE_READ(64)
-//FILE_WRITE(64)
-
-#if 0
-bool files_read_bytes(FILE *out, UINT8 bytes[], size_t len) {
-
-    BAIL_ON_NULL("FILE", out);
-    BAIL_ON_NULL("bytes", bytes);
-    return readx(out, bytes, len);
-}
-#endif 
-
-static bool files_write_bytes(FILE *out, uint8_t bytes[], size_t len) {
-
-    BAIL_ON_NULL("FILE", out);
-    BAIL_ON_NULL("bytes", bytes);
-    return writex(out, bytes, len);
+static uint8_t* buffer_write_bytes(uint8_t *buf, uint8_t bytes[], size_t len) {
+    return writex(buf, bytes, len);
 }
 
-static bool files_write_header(FILE *out, UINT32 version) {
-
-    BAIL_ON_NULL("FILE", out);
-
-    bool res = files_write_32(out, MAGIC);
-    if (!res) {
-        return false;
-    }
-    return files_write_32(out, version);
+static uint8_t*  buffer_write_header(uint8_t *out, uint32_t version) {
+    out = buffer_write_32(out, MAGIC);
+    out = buffer_write_32(out, version);
+    return out;
 }
 
+static inline int
+prepare_cred_blob(TPM2B_ID_OBJECT *enc_key_blob,
+		TPM2B_ENCRYPTED_SECRET *tpm_enc_secret,
+		uint8_t **cred_blob,
+		size_t *cred_blob_size)
+{
+#define TPM_UTIL_HDR_LEN ((sizeof(uint32_t) *2))
+	*cred_blob = (uint8_t *) malloc(sizeof(uint8_t) * 
+		                (TPM_UTIL_HDR_LEN +  //header 
+				enc_key_blob->t.size + //enc_key_blob
+			       	tpm_enc_secret->t.size + //tpm_enc_secret
+				(2*sizeof(uint16_t)))); //size fields of both blobs
+        uint8_t *moving_ptr = *cred_blob;
+	moving_ptr = buffer_write_header(moving_ptr, 1);
+	moving_ptr = buffer_write_16(moving_ptr, enc_key_blob->t.size);
+	moving_ptr = buffer_write_bytes(moving_ptr,
+		enc_key_blob->t.credential, enc_key_blob->t.size); 
+	moving_ptr = buffer_write_16(moving_ptr, tpm_enc_secret->t.size);
+	moving_ptr = buffer_write_bytes(moving_ptr, 
+		tpm_enc_secret->t.secret, tpm_enc_secret->t.size);
+	*cred_blob_size = (size_t)(moving_ptr - *cred_blob);
+	return 0;
+
+}
 static int insert_key_in_tpm
 (
     const unsigned char* key,
@@ -332,50 +210,70 @@ static int insert_key_in_tpm
 	DPS_UNMARSHAL(TPM2B_ENCRYPTED_SECRET, &encrypt_wrap_key);
 	DPS_UNMARSHAL_FLAGGED(TPM2B_PUBLIC, &id_key_Public);
 
-    	log_error(__FUNCTION__);
-	
-	uint8_t buf[4096];
-	uint8_t *pBuf = buf;
+	uint8_t duplicate_key_blob[TPM_MAX_DATA_LENGTH];
+	size_t duplicate_key_blob_size = 0;
+	uint8_t *pBuf = duplicate_key_blob;
 	uint16_t buflen = 0;
-	size_t max_len = 4096;
+	size_t max_len = TPM_MAX_DATA_LENGTH;
 	DPS_MARSHAL(TPM2B_PRIVATE, &id_key_dup_blob, pBuf, max_len);
-	write_buf_to_file((char *)buf, buflen, "id_key_dup_blob.out");
-	pBuf = buf, max_len = 4096;
+	duplicate_key_blob_size = buflen;
+
+	uint8_t kdf_seed[TPM_MAX_DATA_LENGTH];
+	size_t kdf_seed_size = 0;
+	pBuf = kdf_seed;
+	buflen = 0;
 	DPS_MARSHAL(TPM2B_ENCRYPTED_SECRET, &encrypt_wrap_key, pBuf, max_len);
-	write_buf_to_file((char *)buf, buflen, "encrypt_wrap_key.out");
+	kdf_seed_size = buflen;
 
-	pBuf = buf, max_len = 4096;
-	DPS_MARSHAL(TPM2B_ENCRYPTED_SECRET, &tpm_enc_secret, pBuf, max_len);
-	write_buf_to_file((char *)buf, buflen, "tpm_enc_secret.out");
-	pBuf = buf, max_len = 4096;
+	uint8_t public_key[TPM_MAX_DATA_LENGTH];
+	size_t public_key_size = 0;
+	pBuf = public_key;
+	buflen = 0;
 	DPS_MARSHAL(TPM2B_PUBLIC, &id_key_Public, pBuf, max_len);
-	write_buf_to_file((char *)buf, buflen, "id_key_Public.out");
+	public_key_size = buflen;
 
-	FILE *cred_blob_file = fopen("cred_blob.in", "w");
-	if (!cred_blob_file) {
-		log_error("failed to open file to write cred_blob.in");
-	} else {
-		log_error("Opened file to write cred_blob.in");
-	}
-	files_write_header(cred_blob_file, 1);
-	files_write_16(cred_blob_file, enc_key_blob.t.size);
-	files_write_bytes(cred_blob_file, enc_key_blob.t.credential, enc_key_blob.t.size); 
-	files_write_16(cred_blob_file, tpm_enc_secret.t.size);
-	files_write_bytes(cred_blob_file, tpm_enc_secret.t.secret, tpm_enc_secret.t.size);
-	fclose(cred_blob_file);
+	uint8_t *cred_blob = NULL;
+        size_t cred_blob_size = 0;
+	uint8_t *session_context = NULL;
+	size_t session_context_size = 0;
+	uint8_t *encryption_key = NULL;
+	size_t encryption_key_size = 0;
+	
+	prepare_cred_blob(&enc_key_blob, &tpm_enc_secret,
+			&cred_blob, &cred_blob_size);
+	eve_tpm_service_startauthsession(&session_context, &session_context_size);
+        eve_tpm_service_policysecret(session_context, session_context_size, 0x4000000B);
+	eve_tpm_service_activate_credential(TPM_20_SRK_HANDLE, 
+			TPM_20_EK_HANDLE, 
+			cred_blob,
+			cred_blob_size,
+			&encryption_key,
+			&encryption_key_size); 
+        eve_tpm_service_flushcontext(session_context, session_context_size);
+	free(cred_blob);
 
-	system("eve_run tpm2_startauthsession --policy-session -S session.ctx");
-	system("eve_run tpm2_policysecret -S session.ctx -c 0x4000000B");
-	system("eve_run tpm2_activatecredential -c 0x81000001 -C 0x81010001 -i cred_blob.in -o inner_wrap_key.out -P '\"session:session.ctx\"'");
-	system("eve_run tpm2_flushcontext session.ctx");
-
-	system("eve_run tpm2_startauthsession --policy-session -S session.ctx");
-	system("eve_run tpm2_policysecret -S session.ctx -c 0x4000000B");
-	system("eve_run tpm2_import -C 0x81000001 -k inner_wrap_key.out -u id_key_Public.out -r id_key_priv.in -i id_key_dup_blob.out -s encrypt_wrap_key.out -L dpolicy.dat");
-	system("eve_run tpm2_flushcontext session.ctx");
-	system("eve_run tpm2_load -C 0x81000001 -u id_key_Public.out -r id_key_priv.in -c id_key_context.out");
-	system("eve_run tpm2_evictcontrol -c 0x81000100");
-	system("eve_run tpm2_evictcontrol -c id_key_context.out 0x81000100");
+	uint8_t *private_key = NULL;
+	size_t private_key_size = 0;
+	eve_tpm_service_startauthsession(&session_context, &session_context_size);
+        eve_tpm_service_policysecret(session_context, session_context_size, 0x4000000B);
+        eve_tpm_service_import(TPM_20_SRK_HANDLE,
+			 encryption_key, encryption_key_size,
+			 public_key, public_key_size,
+			 duplicate_key_blob, duplicate_key_blob_size,
+			 kdf_seed, kdf_seed_size, 
+			 &private_key, &private_key_size);
+	eve_tpm_service_flushcontext(session_context, session_context_size);
+	free(encryption_key);
+	
+	uint8_t *loaded_key_context = NULL;
+	size_t  loaded_key_context_size = 0;
+	eve_tpm_service_load(TPM_20_SRK_HANDLE,
+			public_key, public_key_size,
+			private_key, private_key_size,
+			&loaded_key_context, &loaded_key_context_size);
+	eve_tpm_service_evictcontrol(DPS_ID_KEY_HANDLE, NULL, 0);
+	eve_tpm_service_evictcontrol(DPS_ID_KEY_HANDLE, loaded_key_context, loaded_key_context_size);
+	free(loaded_key_context);
 
 	return result;
 }
@@ -394,8 +292,6 @@ static int exists(const char *fname)
 static int initialize_tpm_device()
 {
     int result = 0;
-    log_error("Initializing TPM device");
-    system("pwd > /tmp/pwd.log");
     if (!exists(EK_PUB_FILE)) {
 	    system("eve_run tpm2_createek -c 0x81010001 -G rsa -u ek.pub -f tss");
     } 
@@ -521,14 +417,16 @@ static int hsm_client_tpm_sign_data
     if (handle == NULL || data_to_be_signed == NULL || data_to_be_signed_size == 0 ||
                     digest == NULL || digest_size == NULL)
     {
-        LOG_ERROR("Invalid handle value specified handle: %p, data: %p, data_size: %zu, digest: %p, digest_size: %p",
-            handle, data_to_be_signed, data_to_be_signed_size, digest, digest_size);
+        LOG_ERROR("Invalid handle value specified handle: %p, data: %p, data_size: %zu,"
+			" digest: %p, digest_size: %p",
+                         handle, data_to_be_signed, data_to_be_signed_size, digest, digest_size);
         result = __FAILURE__;
     }
-    write_buf_to_file((char *)data_to_be_signed, data_to_be_signed_size, "tok.dat");
-    system("eve_run cp -f tok.dat token.dat");
-    system("eve_run tpm2_hmac -c 0x81000100 -g sha256 -o hmac.out token.dat");
-    read_from_file_to_buf("hmac.out", digest_size, digest); 
+
+    eve_tpm_service_hmac(DPS_ID_KEY_HANDLE, EVE_SHA256,
+		    data_to_be_signed, data_to_be_signed_size,
+		    digest, digest_size);
+
     return result;
 }
 

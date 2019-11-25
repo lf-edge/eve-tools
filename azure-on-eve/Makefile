@@ -27,11 +27,11 @@ SOURCES := \
 	lib/src/hsm_utils.c
 
 libiothsm.so: 
-	$(CC) $(CPPFLAGS) -shared -fPIC -o libiothsm.so $(SOURCES) 
+	$(CC) $(CPPFLAGS) -shared -fPIC -o libiothsm.so $(SOURCES)  -levetools
 
 .PHONY: clean all
 
 clean:
-	rm -rf libevetools.so *.dSYM eve_run 
+	rm -rf libiothsm.so
 
-all: libevetools.so
+all: libiothsm.so
