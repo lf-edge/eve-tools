@@ -1,0 +1,6 @@
+[submodule "azure-on-eve/deps/c-shared"]
+	path = azure-on-eve/deps/c-shared
+	url = https://github.com/Azure/azure-c-shared-utility
+[submodule "azure-on-eve/deps/utpm"]
+	path = azure-on-eve/deps/utpm
+	url = https://github.com/Azure/azure-utpm-c
