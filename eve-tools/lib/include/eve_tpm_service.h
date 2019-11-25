@@ -118,8 +118,8 @@ typedef enum {
 }HEIRARCHY;
 
 typedef enum {
-	SHA256,
-	SHA384,
+	EVE_SHA256,
+	EVE_SHA384,
 }HASH;
 
 
@@ -127,9 +127,9 @@ static inline const char *
 hash_to_str(HASH hash)
 {
 	switch(hash) {
-		case SHA256:
+		case EVE_SHA256:
 			return "sha256";
-		case SHA384:
+		case EVE_SHA384:
 		default:
 			return "unknown";
 	}
@@ -182,7 +182,7 @@ extern int
 eve_tpm_service_hmac(
 		uint32_t key_handle,              //IN
 		HASH hash,                        //IN
-		uint8_t *data_to_be_signed,       //IN
+		const uint8_t *data_to_be_signed,       //IN
 		size_t data_to_be_signed_size,    //IN
 		uint8_t **digest,                 //OUT
 		size_t *digest_size               //OUT

@@ -206,6 +206,7 @@ __eve_tpm_service_flushcontext(
 	PREP_TPM_CMD("session_context");
 	SEND_TO_SERVER();
 	PARSE_RESPONSE();
+	delete(session_context);
 	return 0;
 }
 
@@ -284,7 +285,7 @@ static int
 __eve_tpm_service_hmac(
 		uint32_t key_handle,              //IN
 		HASH hash,                        //IN
-		uint8_t *data_to_be_signed,       //IN
+		const uint8_t *data_to_be_signed,       //IN
 		size_t data_to_be_signed_size,    //IN
 		uint8_t **digest,                 //OUT
 		size_t *digest_size               //OUT
@@ -480,7 +481,7 @@ int
 eve_tpm_service_hmac(
 		uint32_t key_handle,              //IN
 		HASH hash,                        //IN
-		uint8_t *data_to_be_signed,       //IN
+		const uint8_t *data_to_be_signed, //IN
 		size_t data_to_be_signed_size,    //IN
 		uint8_t **digest,                 //OUT
 		size_t *digest_size               //OUT
