@@ -70,7 +70,9 @@ extern int
 eve_tpm_service_policysecret(
 		uint8_t *session_context,           //IN
 		size_t session_context_size,        //IN
-		uint32_t object_handle              //IN
+		uint32_t object_handle,    	    //IN
+		uint8_t **new_session_context,      //OUT
+		size_t *new_session_context_size    //OUT
 		);
 
 typedef enum {

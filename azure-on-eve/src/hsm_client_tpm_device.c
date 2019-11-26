@@ -41,13 +41,6 @@ typedef struct HSM_CLIENT_INFO_TAG
 } HSM_CLIENT_INFO;
 
 
-static inline void
-log_error(const char *str) 
-{
-	FILE *fp = fopen("/tmp/iotege.log", "a");
-	fprintf(fp, "%s\n", str); 
-	fclose(fp);
-}
 #define DPS_UNMARSHAL(Type, pValue) \
 {                                                                       \
     TPM_RC rc = Type##_Unmarshal(pValue, &curr_pos, (INT32*)&act_size);         \
@@ -86,19 +79,6 @@ log_error(const char *str)
         curr_pos += arrSize;                         \
     }
 
-static int
-write_buf_to_file (const char *buf, int buflen, const char *filename)
-{
-	FILE *fp = fopen(filename, "wb");
-	log_error(__FUNCTION__);
-	if (!fp) {
-		return -1;
-	}
-	fwrite(buf, buflen, 1, fp);
-	fclose(fp);
-	return 0;
-}
-
 static size_t
 size_of_file (const char *filename)
 {
@@ -116,7 +96,6 @@ static int
 read_from_file_to_buf (const char *filename, size_t *buflen, unsigned char **buf)
 {
 	FILE *fp = fopen(filename, "rb");
-    	log_error(__FUNCTION__);
 	if (!fp) {
 		return 0;
 	}
@@ -130,6 +109,42 @@ read_from_file_to_buf (const char *filename, size_t *buflen, unsigned char **buf
 	return 0;
 }
 
+static bool tpm2_util_is_big_endian(void) {
+
+    uint32_t test_word;
+    uint8_t *test_byte;
+
+    test_word = 0xFF000000;
+    test_byte = (uint8_t *) (&test_word);
+
+    return test_byte[0] == 0xFF;
+}
+
+#define STRING_BYTES_ENDIAN_CONVERT(size) \
+    UINT##size tpm2_util_endian_swap_##size(UINT##size data) { \
+    \
+        UINT##size converted; \
+        UINT8 *bytes = (UINT8 *)&data; \
+        UINT8 *tmp = (UINT8 *)&converted; \
+    \
+        size_t i; \
+        for(i=0; i < sizeof(UINT##size); i ++) { \
+            tmp[i] = bytes[sizeof(UINT##size) - i - 1]; \
+        } \
+        \
+        return converted; \
+    }
+
+STRING_BYTES_ENDIAN_CONVERT(16)
+STRING_BYTES_ENDIAN_CONVERT(32)
+
+#define BE_CONVERT(value, size) \
+    do { \
+        if (!tpm2_util_is_big_endian()) { \
+            value = tpm2_util_endian_swap_##size(value); \
+        } \
+    } while (0)
+
 static uint8_t* writex(uint8_t *buf, uint8_t *data, size_t size) {
     memcpy(buf, data, size);
     return buf + size;
@@ -137,6 +152,7 @@ static uint8_t* writex(uint8_t *buf, uint8_t *data, size_t size) {
 
 #define BUFFER_WRITE(size) \
     uint8_t* buffer_write_##size(uint8_t *buf, uint##size##_t data) { \
+        BE_CONVERT(data, size); \
         return writex(buf, (uint8_t *)&data, sizeof(data)); \
     } \
 
@@ -242,7 +258,8 @@ static int insert_key_in_tpm
 	prepare_cred_blob(&enc_key_blob, &tpm_enc_secret,
 			&cred_blob, &cred_blob_size);
 	eve_tpm_service_startauthsession(&session_context, &session_context_size);
-        eve_tpm_service_policysecret(session_context, session_context_size, 0x4000000B);
+        eve_tpm_service_policysecret(session_context, session_context_size, 0x4000000B,
+			&session_context, &session_context_size);
 	eve_tpm_service_activate_credential(TPM_20_SRK_HANDLE, 
 			TPM_20_EK_HANDLE, 
 			cred_blob,
@@ -255,7 +272,8 @@ static int insert_key_in_tpm
 	uint8_t *private_key = NULL;
 	size_t private_key_size = 0;
 	eve_tpm_service_startauthsession(&session_context, &session_context_size);
-        eve_tpm_service_policysecret(session_context, session_context_size, 0x4000000B);
+        eve_tpm_service_policysecret(session_context, session_context_size, 0x4000000B,
+			&session_context, &session_context_size);
         eve_tpm_service_import(TPM_20_SRK_HANDLE,
 			 encryption_key, encryption_key_size,
 			 public_key, public_key_size,

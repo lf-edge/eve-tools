@@ -104,7 +104,7 @@ __eve_tpm_service_activate_credential(
 		size_t *cert_info_size            //OUT
 		) {
 
-    INITIALIZE("tpm2_activatecredential -c 0x%x -C 0x%x -i %s -o %s -P\"session:session.ctx\"");
+    INITIALIZE("tpm2_activatecredential -c 0x%x -C 0x%x -i %s -o %s -P\"session:session_context\"");
     ADD_INPUT(cred_blob, cred_blob_size);
     ADD_OUTPUT(cert_info);
     PREP_TPM_CMD(credentialed_key_handle, credential_key_handle, "cred_blob", "cert_info");
@@ -189,6 +189,7 @@ __eve_tpm_service_startauthsession(
 		size_t *session_context_size        //OUT
 		) {
     INITIALIZE("tpm2_startauthsession --policy-session -S %s");
+    ADD_OUTPUT(session_context);
     PREP_TPM_CMD("session_context");
     SEND_TO_SERVER();
     PARSE_RESPONSE();
@@ -214,13 +215,18 @@ static int
 __eve_tpm_service_policysecret(
 		uint8_t *session_context,           //IN
 		size_t session_context_size,        //IN
-		uint32_t object_handle              //IN
+		uint32_t object_handle,             //IN
+		uint8_t **new_session_context,      //OUT
+		size_t *new_session_context_size    //OUT
 		) {
 	INITIALIZE("tpm2_policysecret -S %s -c 0x%X");
 	ADD_INPUT(session_context, session_context_size);
+	ADD_OUTPUT(session_context);
+	free(session_context);
 	PREP_TPM_CMD("session_context", object_handle);
 	SEND_TO_SERVER();
 	PARSE_RESPONSE();
+	EXTRACT_OUTPUT(new_session_context);
 	return 0;
 }
 
@@ -285,21 +291,23 @@ static int
 __eve_tpm_service_hmac(
 		uint32_t key_handle,              //IN
 		HASH hash,                        //IN
-		const uint8_t *data_to_be_signed,       //IN
+		const uint8_t *data_to_be_signed, //IN
 		size_t data_to_be_signed_size,    //IN
 		uint8_t **digest,                 //OUT
 		size_t *digest_size               //OUT
 		) {
 	INITIALIZE("tpm2_hmac -c 0x%X -g %s -o %s %s");
-	PREP_TPM_CMD(key_handle, hash_to_str(hash), 
-		      "digest", "data_to_be_signed");
 	ADD_INPUT(data_to_be_signed, data_to_be_signed_size);
 	ADD_OUTPUT(digest);
+	PREP_TPM_CMD(key_handle, hash_to_str(hash), 
+		      "digest", "data_to_be_signed");
 	SEND_TO_SERVER();
 	PARSE_RESPONSE();
 	EXTRACT_OUTPUT(digest);
     return 0;
 }
+
+extern "C" {
 
 int
 eve_tpm_service_activate_credential(
@@ -415,13 +423,17 @@ int
 eve_tpm_service_policysecret(
 		uint8_t *session_context,           //IN
 		size_t session_context_size,        //IN
-		uint32_t object_handle             //IN
+		uint32_t object_handle,    	    //IN
+		uint8_t **new_session_context,      //OUT
+		size_t *new_session_context_size    //OUT
 		)
 {
 	return __eve_tpm_service_policysecret(
 			session_context,
 			session_context_size,
-			object_handle);
+			object_handle,
+			new_session_context,
+			new_session_context_size);
 }
 
 int
@@ -494,5 +506,6 @@ eve_tpm_service_hmac(
 			data_to_be_signed_size,
 			digest,
 			digest_size);
+}
 }
 

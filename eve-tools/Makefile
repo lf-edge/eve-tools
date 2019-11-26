@@ -14,7 +14,7 @@ eve_run: libevetools.so
 	$(CC) tools/eve_run.cpp cpp/api.pb.cc $(CPPFLAGS) -o eve_run $(LDLIBS)
 
 libevetools.so: lib/src/sendrecv.cpp
-	$(CC) $(CPPFLAGS) -shared -fPIC -o libevetools.so lib/src/sendrecv.cpp lib/src/eve_tpm_service.cpp -lprotobuf
+	$(CC) $(CPPFLAGS) -shared -fPIC -o libevetools.so lib/src/sendrecv.cpp lib/src/eve_tpm_service.cpp cpp/api.pb.cc -lprotobuf
 
 .PHONY: clean all
 
