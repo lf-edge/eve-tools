@@ -5,8 +5,7 @@ RUN apt update && \
     apt install -y g++ make libprotobuf-dev \
                    libprotoc-dev protobuf-compiler
 ADD . /
-WORKDIR /
+WORKDIR /eve-tools
 RUN cp proto/api.proto . && \
     protoc --cpp_out=cpp api.proto && \
-    make clean && make all && \
-    cp libevetools.so /usr/lib
+    make clean && make all && make install
