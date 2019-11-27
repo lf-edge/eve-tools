@@ -4,10 +4,10 @@ This repository contains library and tools required to interact with the Edge Vi
 
 In a quick summary, Edge Virtualization Engine provides a uniform virtualization layer on various Edge gateways, using which Edge workloads can be deployed as Containers or Virtual Machines, commonly called the Edge Containers. For more details about EVE, please visit https://github.com/lf-edge/eve.
 
-Edge Containers run on virtualized environment. However, in some cases, it is useful for the applications running inside these Edge Containers to have a way to interact with the host operating system(i.e. EVE), to collaboratively implement certain functionality for better agility, security and accuracy. Some example use cases below:
+Edge Containers run in virtualized environment. However, in some cases, it is useful for the applications running inside these Edge Containers to have a way to interact with the host operating system(i.e. EVE), to collaboratively implement certain functionality for better agility, security and accuracy. Some example use cases below:
 
 * An application might want to pin its identity with an EK on the hardware TPM ASIC, to make
-sure it's identity is sealed to the hardware platform it is running on.
+sure its identity is sealed to the hardware platform it is running on.
 
 * An application might want to have a way to communicate with its host operating system to establish a
 liveliness check, where it can be restarted by the EVE layer, when the Edge Container turns

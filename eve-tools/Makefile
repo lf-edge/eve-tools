@@ -24,6 +24,7 @@ clean:
 install: libevetools.so eve_run
 	install -d $(DESTDIR)$(PREFIX)/lib/
 	install -m 644 libevetools.so $(DESTDIR)$(PREFIX)/lib/
+	install -m 644 eve_run $(DESTDIR)$(PREFIX)/bin
 	install -d $(DESTDIR)$(PREFIX)/include/
 	install -m 644 lib/include/eve_tpm_service.h $(DESTDIR)$(PREFIX)/include/
 

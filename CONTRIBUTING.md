@@ -1,8 +1,5 @@
 # Contributing to EVE Tools 
 
-EVE community shares the spirit of the [Apache Way](https://apache.org/theapacheway/)
-and believes in "Community over Code".
-
 ## Providing feedback via GitHub issues
 
 A great way to contribute to the project is to send a detailed report when you
