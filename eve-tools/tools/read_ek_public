@@ -1,0 +1,5 @@
+#!/bin/sh
+EK_HANDLE=0x81010001
+eve_run tpm2_readpublic -c ${EK_HANDLE} -f tss -o ek.pub -Q > /dev/null
+echo `base64 ek.pub -w 0`
+rm ek.pub

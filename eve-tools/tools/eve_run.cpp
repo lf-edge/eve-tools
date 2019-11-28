@@ -196,6 +196,10 @@ int main (int argc, char *argv[])
     //for now, a poor man's unit test.
     doUnitTest();
 #else
+    if (argc < 2) {
+	    cout << "Usage: eve_run tpm_command [args]" << std::endl;
+	    return 0;
+    }
     eve_tools::EveTPMRequest request;
     prepareFileMappings(argc, (const char **) argv, request);
     std::string output; 
