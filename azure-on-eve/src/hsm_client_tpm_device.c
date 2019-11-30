@@ -313,8 +313,11 @@ static int initialize_tpm_device(HSM_CLIENT_INFO *handle)
 	    size_t srk_context_size = 0;
 	    eve_tpm_service_createprimary(TPM_20_SRK_HANDLE, ENDORSEMENT, RSA, EVE_SHA256,
 			                  &srk_context, &srk_context_size);
-	    eve_tpm_service_readpublic(TPM_20_SRK_HANDLE, srk_context, srk_context_size,
+	    if (srk_context != NULL) {
+	    	eve_tpm_service_readpublic(TPM_20_SRK_HANDLE, srk_context, srk_context_size,
 			               TSS, &handle->srk_pub, &handle->srk_pub_size);
+		free(srk_context);
+	    }
     }
     return result;
 }

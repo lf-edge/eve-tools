@@ -240,9 +240,9 @@ __eve_tpm_service_createprimary(
 		size_t *context_size              //OUT
 		) {
 	INITIALIZE("tpm2_createprimary -C %s -G %s -g %s -c %s");
+	ADD_OUTPUT(context);
 	PREP_TPM_CMD(hierarchy_to_str, alg_to_str(algorithm), 
 	             hash_to_str(hash), context);		
-	ADD_OUTPUT(context);
 	SEND_TO_SERVER();
 	PARSE_RESPONSE();
         EXTRACT_OUTPUT(context);
@@ -259,9 +259,9 @@ __eve_tpm_service_createek(
 		size_t *key_public_size           //OUT
 		) {
 	INITIALIZE("tpm2_createek -c 0x%x -G %s -u %s -f %s");
+	ADD_OUTPUT(key_public);
 	PREP_TPM_CMD(persistent_handle, alg_to_str(algorithm), 
 	             "key_public", pubkeyformat_to_str(kformat));
-	ADD_OUTPUT(key_public);
 	SEND_TO_SERVER();
 	PARSE_RESPONSE();
         EXTRACT_OUTPUT(key_public);
@@ -282,6 +282,7 @@ __eve_tpm_service_readpublic(
 	if (!handle && !context) {
 		return -1;
 	}
+	ADD_OUTPUT(key_public);
 	if (handle) {
 		format = "tpm2_readpublic -c 0x%x -o %s -f %s";
 		PREP_TPM_CMD(handle, "key_public", pubkeyformat_to_str(kformat));
@@ -289,7 +290,6 @@ __eve_tpm_service_readpublic(
 		PREP_TPM_CMD("context", "key_public", pubkeyformat_to_str(kformat));
 		ADD_INPUT(context, context_size);
 	}
-	ADD_OUTPUT(key_public);
 	SEND_TO_SERVER();
 	PARSE_RESPONSE();
 	EXTRACT_OUTPUT(key_public);
