@@ -387,7 +387,7 @@ static int hsm_client_tpm_get_endorsement_key
     size_t* key_len
 )
 {
-    int result;
+    int result = 0;
     if (handle == NULL || key == NULL || key_len == NULL)
     {
         LOG_ERROR("Invalid handle value specified: handle: %p, result: %p, result_len: %p", handle, key, key_len);
@@ -413,7 +413,7 @@ static int hsm_client_tpm_get_storage_key
     size_t* key_len
 )
 {
-    int result;
+    int result = 0;
     if (handle == NULL || key == NULL || key_len == NULL)
     {
         LOG_ERROR("Invalid handle value specified: handle: %p, result: %p, result_len: %p", handle, key, key_len);
