@@ -173,6 +173,7 @@ eve_tpm_service_createek(
 
 extern int
 eve_tpm_service_readpublic(
+		uint32_t handle,                  //IN
 		uint8_t *context,                 //IN
 		size_t context_size,              //IN
 		PUB_KEYOUT_FORMAT format,         //IN

@@ -26,14 +26,13 @@ static const uint32_t TPM_20_SRK_HANDLE = 0x81000001;
 static const uint32_t TPM_20_EK_HANDLE =  0x81010001;
 static const uint32_t DPS_ID_KEY_HANDLE = 0x81000100;
 
-#define SRK_PUB_FILE "/home/ubuntu/hsm/srk.pub"
-#define EK_PUB_FILE "/home/ubuntu/hsm/ek.pub"
-
 typedef struct HSM_CLIENT_INFO_TAG
 {
-    TSS_DEVICE tpm_device;
-    TPM2B_PUBLIC ek_pub;
-    TPM2B_PUBLIC srk_pub;
+    uint8_t *ek_pub;
+    size_t ek_pub_size;
+
+    uint8_t *srk_pub;
+    size_t srk_pub_size;
 
     TPM2B_PUBLIC id_key_public;
     TPM2B_PRIVATE id_key_dup_blob;
@@ -79,6 +78,7 @@ typedef struct HSM_CLIENT_INFO_TAG
         curr_pos += arrSize;                         \
     }
 
+#if 0
 static size_t
 size_of_file (const char *filename)
 {
@@ -108,6 +108,7 @@ read_from_file_to_buf (const char *filename, size_t *buflen, unsigned char **buf
 	fclose(fp);
 	return 0;
 }
+#endif 
 
 static bool tpm2_util_is_big_endian(void) {
 
@@ -296,27 +297,24 @@ static int insert_key_in_tpm
 	return result;
 }
 
-static int exists(const char *fname)
-{
-    FILE *file;
-    if ((file = fopen(fname, "r")))
-    {
-        fclose(file);
-        return 1;
-    }
-    return 0;
-}
-
-static int initialize_tpm_device()
+static int initialize_tpm_device(HSM_CLIENT_INFO *handle)
 {
     int result = 0;
-    if (!exists(EK_PUB_FILE)) {
-	    system("eve_run tpm2_createek -c 0x81010001 -G rsa -u ek.pub -f tss");
-    } 
-    if (!exists(SRK_PUB_FILE)) {
-	    system("eve_run tpm2_createprimary -C e -G rsa -g sha256 -c context.out -a \"'restricted|decrypt|fixedtpm|fixedparent|sensitivedataorigin|userwithauth'\"");
-	    system("eve_run tpm2_evictcontrol -c context.out 0x81000001");
-	    system("eve_run tpm2_readpublic -c context.out -o srk.pub -f tss");
+    eve_tpm_service_readpublic(TPM_20_EK_HANDLE, NULL, 0, TSS, &handle->ek_pub,
+		                &handle->ek_pub_size); 
+    if (handle->ek_pub == NULL) {
+	    eve_tpm_service_createek(TPM_20_EK_HANDLE, RSA, TSS, &handle->ek_pub, 
+			             &handle->ek_pub_size); 
+    }
+    eve_tpm_service_readpublic(TPM_20_SRK_HANDLE, NULL, 0, TSS, &handle->srk_pub,
+		                    &handle->srk_pub_size); 
+    if (handle->srk_pub == NULL) {
+	    uint8_t *srk_context = NULL;
+	    size_t srk_context_size = 0;
+	    eve_tpm_service_createprimary(TPM_20_SRK_HANDLE, ENDORSEMENT, RSA, EVE_SHA256,
+			                  &srk_context, &srk_context_size);
+	    eve_tpm_service_readpublic(TPM_20_SRK_HANDLE, srk_context, srk_context_size,
+			               TSS, &handle->srk_pub, &handle->srk_pub_size);
     }
     return result;
 }
@@ -324,7 +322,7 @@ static int initialize_tpm_device()
 static HSM_CLIENT_HANDLE hsm_client_tpm_create()
 {
     HSM_CLIENT_INFO* result;
-    result = malloc(sizeof(HSM_CLIENT_INFO) );
+    result = malloc(sizeof(HSM_CLIENT_INFO));
     if (result == NULL)
     {
         LOG_ERROR("Failure: malloc HSM_CLIENT_INFO.");
@@ -332,7 +330,7 @@ static HSM_CLIENT_HANDLE hsm_client_tpm_create()
     else
     {
         memset(result, 0, sizeof(HSM_CLIENT_INFO));
-        if (initialize_tpm_device() != 0)
+        if (initialize_tpm_device(result) != 0)
         {
             LOG_ERROR("Failure initializing tpm device.");
             free(result);
@@ -347,8 +345,6 @@ static void hsm_client_tpm_destroy(HSM_CLIENT_HANDLE handle)
     if (handle != NULL)
     {
         HSM_CLIENT_INFO* hsm_client_info = (HSM_CLIENT_INFO*)handle;
-
-        Deinit_TPM_Codec(&hsm_client_info->tpm_device);
         free(hsm_client_info);
     }
 }
@@ -396,7 +392,13 @@ static int hsm_client_tpm_get_endorsement_key
     }
     else
     {
-	result = read_from_file_to_buf(EK_PUB_FILE, key_len, key);
+	HSM_CLIENT_INFO *client_info = (HSM_CLIENT_INFO *)handle;
+	*key = (unsigned char *)malloc(client_info->ek_pub_size);
+        if (*key == NULL) {
+		return -1;
+	}	
+	memcpy(*key, client_info->ek_pub, client_info->ek_pub_size);
+	*key_len = client_info->ek_pub_size;
     }
     return result;
 }
@@ -416,7 +418,13 @@ static int hsm_client_tpm_get_storage_key
     }
     else
     {
-	result = read_from_file_to_buf(SRK_PUB_FILE, key_len, key);
+	HSM_CLIENT_INFO *client_info = (HSM_CLIENT_INFO *)handle;
+	*key = (unsigned char *)malloc(client_info->srk_pub_size);
+        if (*key == NULL) {
+		return -1;
+	}	
+	memcpy(*key, client_info->srk_pub, client_info->srk_pub_size);
+	*key_len = client_info->srk_pub_size;
     }
     return result;
 }

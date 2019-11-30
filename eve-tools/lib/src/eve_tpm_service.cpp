@@ -271,20 +271,29 @@ __eve_tpm_service_createek(
 
 static int
 __eve_tpm_service_readpublic(
+		uint32_t handle,                  //IN
 		uint8_t *context,                 //IN
 		size_t context_size,              //IN
-		PUB_KEYOUT_FORMAT kformat,         //IN
+		PUB_KEYOUT_FORMAT kformat,        //IN
 		uint8_t **key_public,             //OUT
 		size_t *key_public_size           //OUT
 		) {
 	INITIALIZE("tpm2_readpublic -c %s -o %s -f %s");
-	PREP_TPM_CMD("context", "key_public", pubkeyformat_to_str(kformat));
-	ADD_INPUT(context, context_size);
+	if (!handle && !context) {
+		return -1;
+	}
+	if (handle) {
+		format = "tpm2_readpublic -c 0x%x -o %s -f %s";
+		PREP_TPM_CMD(handle, "key_public", pubkeyformat_to_str(kformat));
+	} else if (context) {
+		PREP_TPM_CMD("context", "key_public", pubkeyformat_to_str(kformat));
+		ADD_INPUT(context, context_size);
+	}
 	ADD_OUTPUT(key_public);
 	SEND_TO_SERVER();
 	PARSE_RESPONSE();
-        EXTRACT_OUTPUT(key_public);
-    return 0;
+	EXTRACT_OUTPUT(key_public);
+	return 0;
 }
 
 static int
@@ -474,6 +483,7 @@ eve_tpm_service_createek(
 
 int
 eve_tpm_service_readpublic(
+		uint32_t handle,                  //IN
 		uint8_t *context,                 //IN
 		size_t context_size,              //IN
 		PUB_KEYOUT_FORMAT format,         //IN
@@ -482,6 +492,7 @@ eve_tpm_service_readpublic(
 		)
 {
 	return __eve_tpm_service_readpublic(
+			handle,
 			context,
 			context_size,
 			format,
