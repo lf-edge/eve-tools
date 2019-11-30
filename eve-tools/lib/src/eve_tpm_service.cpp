@@ -83,6 +83,9 @@ parse_response_buffer (char *payload,
 #define PARSE_RESPONSE() \
 	eve_tools::EveTPMResponse response; \
 	parse_response_buffer(resp_buf, resp_buf_size, response); \
+	if (response.response().find("ERROR") != response.response().npos) { \
+		return -1; \
+	} \
 
 
 #define EXTRACT_OUTPUT(output_buf) \
