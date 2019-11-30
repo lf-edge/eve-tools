@@ -244,8 +244,8 @@ __eve_tpm_service_createprimary(
 		) {
 	INITIALIZE("tpm2_createprimary -C %s -G %s -g %s -c %s");
 	ADD_OUTPUT(context);
-	PREP_TPM_CMD(hierarchy_to_str, alg_to_str(algorithm), 
-	             hash_to_str(hash), context);		
+	PREP_TPM_CMD(hierarchy_to_str(hierarchy), alg_to_str(algorithm), 
+	             hash_to_str(hash), "context");
 	SEND_TO_SERVER();
 	PARSE_RESPONSE();
         EXTRACT_OUTPUT(context);
