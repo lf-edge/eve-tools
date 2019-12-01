@@ -22,11 +22,10 @@ clean:
 	rm -rf libevetools.so *.dSYM eve_run 
 
 install: libevetools.so eve_run
-	install -d $(DESTDIR)$(PREFIX)/lib/
-	install -m 755 libevetools.so $(DESTDIR)$(PREFIX)/lib/
-	install -m 755 eve_run $(DESTDIR)$(PREFIX)/bin
+	install -m 755 libevetools.so /usr/lib
+	install -m 755 eve_run /usr/bin
 	install -m 755 tools/read_ek_public /usr/bin
-	install -d $(DESTDIR)$(PREFIX)/include/
-	install -m 644 lib/include/eve_tpm_service.h $(DESTDIR)$(PREFIX)/include/
+	install -d /usr/include
+	install -m 644 lib/include/eve_tpm_service.h /usr/include
 
 all: libevetools.so eve_run 
