@@ -4,6 +4,8 @@
 #include <iostream>
 #include "api.pb.h"
 #include <string.h>
+#include <list>
+#include <algorithm>
 #include <string>
 #include <fstream>
 #include <sstream>
@@ -37,6 +39,12 @@ typedef struct file_mapping {
     enum opt_file_direction dir;
 }file_mapping;
 
+std::list<string> cmds_w_file_operands = {
+"tpm2_sign",
+"tpm2_hash",
+"tpm2_hmac",
+};
+
 //The holder for various commands we support.
 //TBD, read this data from a yaml file instead?
 static file_mapping file_mappings[] = { 
@@ -44,13 +52,14 @@ static file_mapping file_mappings[] = {
 { "tpm2_createek", "-u", DONTCARE, OUT },
 { "tpm2_createek", "-t", DONTCARE, IN  },
 { "tpm2_createak", "-c", FILENAME, OUT },
-{ "tpm2_createak", "-u", DONTCARE, OUT },
+{ "tpm2_createak", "-C", FILENAME, IN },
 { "tpm2_createak", "-n", DONTCARE, OUT },
 { "tpm2_createak", "-r", DONTCARE, OUT },
-{ "tpm2_sign",     "-c", FILENAME, IN  },
-{ "tpm2_sign",     "-d", DONTCARE, IN  },
 { "tpm2_sign",     "-t", DONTCARE, IN  },
 { "tpm2_sign",     "-o", DONTCARE, OUT },
+{ "tpm2_sign",     "-c", FILENAME, IN },
+{ "tpm2_hash",     "-t", DONTCARE, OUT },
+{ "tpm2_hash",     "-o", DONTCARE, OUT },
 { "tpm2_createprimary",     "-c", DONTCARE, OUT },
 { "tpm2_evictcontrol",     "-c", FILENAME, IN },
 { "tpm2_readpublic",     "-c", FILENAME, IN },
@@ -76,7 +85,6 @@ static file_mapping file_mappings[] = {
 { "tpm2_load",     "-r", DONTCARE, IN},
 { "tpm2_hmac",     "-c", FILENAME, IN},
 { "tpm2_hmac",     "-o", DONTCARE, OUT},
-{ "cp",     "-f", DONTCARE, IN},
 };
 
 
@@ -98,7 +106,9 @@ int populateFileEntries (int argc, const char *argv[],
                            file_mapping &cmd, int opt_index)
 {
     if (cmd.check_type == FILENAME && opt_index < (argc-1)) {
+#ifdef VERBOSE
 	cout << "Checking if " << argv[opt_index+1] << " is a filename" << std::endl;
+#endif //VERBOSE
         if (!isStringHex(string(argv[opt_index+1]))) {
             if (cmd.dir == OUT) {
                 request.add_expectedfiles(argv[opt_index+1]);
@@ -138,6 +148,32 @@ int populateFileEntries (int argc, const char *argv[],
     return 0;
 }
 
+int processSpecialCmds(int argc, const char *argv[],
+                   eve_tools::EveTPMRequest &request)
+{
+  std::string command(argv[1]);
+  if (argc < 2) {
+	  //Nothing to parse, no args for the command.
+	  return 0;
+  }
+  auto it = find(cmds_w_file_operands.begin(), cmds_w_file_operands.end(), command);
+  if (it != cmds_w_file_operands.end()) {
+            fstream file;
+            ostringstream ostrm;
+            file.open(argv[argc-1], ios::in|ios::binary);
+            if (!file) {
+                cout << "File not found: " << argv[argc-1] << std::endl;
+                return -1;
+            }
+            ostrm << file.rdbuf();
+            eve_tools::File *input_file = request.add_inputfiles();
+            input_file->set_name(argv[argc-1]);
+            input_file->set_content(ostrm.str()); 
+            file.close();
+  }
+  return 0;
+}
+
 //We've received a command which can have filename as args
 //Check if we have actually received any filename args
 int processCmdOpts(int argc, const char *argv[],
@@ -160,6 +196,7 @@ int prepareFileMappings(int argc, const char *argv[],
            processCmdOpts(argc, argv, request, file_mappings[i]);
         }
     }
+    processSpecialCmds(argc, argv, request);
     return 0;
 }
 
@@ -175,7 +212,9 @@ static int doUnitTest()
     target.ParseFromString(output);
     for (int i=0; i < target.inputfiles_size(); i++) {
         const eve_tools::File& file = target.inputfiles(i);
+#ifdef VERBOSE
         cout << "Processing file: " << file.name() << std::endl;
+#endif //VERBOSE
         ofstream target_file;
         target_file.open("test1.jpg", ios::out|ios::binary);
         if (!target_file) {
@@ -208,7 +247,6 @@ int main (int argc, char *argv[])
         command <<" " << argv[i];
     }
     request.set_command(command.str());
-    //cout << "Size of the payload before CodedStream is " << request.ByteSize() << std::endl;
     int siz = request.ByteSize() + 4;
     char *pkt = new char [siz];
     google::protobuf::io::ArrayOutputStream aos(pkt,siz);
@@ -223,7 +261,6 @@ int main (int argc, char *argv[])
         cout << "Failed to send request: " << rc << std::endl;
     }
     eve_tools::EveTPMResponse response;
-    //cout << "Payload byte count is " << resp_length;
         google::protobuf::io::ArrayInputStream ais(resp_buf, resp_length);
         CodedInputStream coded_input(&ais);
     google::protobuf::uint32 size;
@@ -234,7 +271,6 @@ int main (int argc, char *argv[])
     //response.ParseFromString(resp_buf);
     for (int i=0; i < response.outputfiles_size(); i++) {
         const eve_tools::File& file = response.outputfiles(i);
-        //cout << "Processing file: " << file.name() << std::endl;
         ofstream output_file;
         output_file.open(file.name(), ios::out|ios::binary);
         if (!output_file) {
@@ -249,6 +285,7 @@ int main (int argc, char *argv[])
 #endif
     return 0;
 }
+
 
 
 
