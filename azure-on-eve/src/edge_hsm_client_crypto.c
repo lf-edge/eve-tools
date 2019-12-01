@@ -23,9 +23,11 @@ static const HSM_CLIENT_KEY_INTERFACE* g_hsm_key_if = NULL;
 static bool g_is_crypto_initialized = false;
 static unsigned int g_crypto_ref = 0;
 
+#define HSM_EVE_DEFAULT_CA_EXPIRY_SECONDS 7776000
 int hsm_client_crypto_init(uint64_t auto_generated_ca_lifetime)
 {
     int result;
+    auto_generated_ca_lifetime = HSM_EVE_DEFAULT_CA_EXPIRY_SECONDS;
 
     if (!g_is_crypto_initialized)
     {
