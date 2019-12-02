@@ -139,7 +139,7 @@ endif(save_ut)
 if(WIN32)
     target_link_libraries(iothsm aziotsharedutil utpm $ENV{OPENSSL_ROOT_DIR}/lib/ssleay32.lib $ENV{OPENSSL_ROOT_DIR}/lib/libeay32.lib advapi32)
 else()
-    target_link_libraries(iothsm aziotsharedutil utpm ${OPENSSL_LIBRARIES} /usr/local/lib/libevetools.so)
+    target_link_libraries(iothsm aziotsharedutil utpm ${OPENSSL_LIBRARIES} /usr/lib/libevetools.so)
 endif(WIN32)
 
 if (${run_unittests})

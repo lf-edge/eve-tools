@@ -99,21 +99,30 @@ parse_response_buffer (char *payload,
 
 static int
 __eve_tpm_service_activate_credential(
+		uint8_t *session_context,
+		size_t session_context_size,
 		uint32_t credentialed_key_handle, //IN
 		uint32_t credential_key_handle,   //IN
 		uint8_t *cred_blob,               //IN
 		size_t cred_blob_size,            //IN
 		uint8_t **cert_info,              //OUT
-		size_t *cert_info_size            //OUT
+		size_t *cert_info_size,           //OUT
+		uint8_t **new_session_context,
+		size_t *new_session_context_size
 		) {
 
-    INITIALIZE("tpm2_activatecredential -c 0x%x -C 0x%x -i %s -o %s -P\"session:session_context\"");
+    INITIALIZE("tpm2_activatecredential -c 0x%x -C 0x%x -i %s -o %s -P\"session:%s\"");
     ADD_INPUT(cred_blob, cred_blob_size);
+    ADD_INPUT(session_context, session_context_size);
     ADD_OUTPUT(cert_info);
-    PREP_TPM_CMD(credentialed_key_handle, credential_key_handle, "cred_blob", "cert_info");
+    ADD_OUTPUT(session_context);
+    free(session_context);
+    PREP_TPM_CMD(credentialed_key_handle, credential_key_handle,
+		    "cred_blob", "cert_info", "session_context");
     SEND_TO_SERVER();
     PARSE_RESPONSE();
     EXTRACT_OUTPUT(cert_info);
+    EXTRACT_OUTPUT(new_session_context);
 
     return 0;
 }
@@ -323,21 +332,29 @@ extern "C" {
 
 int
 eve_tpm_service_activate_credential(
+		uint8_t *session_context,
+		size_t session_context_size,
 		uint32_t credentialed_key_handle, //IN
 		uint32_t credential_key_handle,   //IN
 		uint8_t *cred_blob,               //IN
 		size_t cred_blob_size,            //IN
 		uint8_t **cert_info,              //OUT
-		size_t *cert_info_size            //OUT
+		size_t *cert_info_size,           //OUT
+		uint8_t **new_session_context,
+		size_t *new_session_context_size
 		)
 {
 	return __eve_tpm_service_activate_credential(
+			session_context,
+			session_context_size,
 			credentialed_key_handle,
 			credential_key_handle,
 			cred_blob,
 			cred_blob_size,
 			cert_info,
-			cert_info_size
+			cert_info_size,
+			new_session_context,
+			new_session_context_size
 			);
 }
 

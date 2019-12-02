@@ -11,12 +11,16 @@ extern "C" {
 
 extern int
 eve_tpm_service_activate_credential(
+		uint8_t *session_context,
+		size_t session_context_size,
 		uint32_t credentialed_key_handle, //IN
 		uint32_t credential_key_handle,   //IN
 		uint8_t *cred_blob,               //IN
 		size_t cred_blob_size,            //IN
 		uint8_t **cert_info,              //OUT
-		size_t *cert_info_size            //OUT
+		size_t *cert_info_size,           //OUT
+		uint8_t **new_session_context,
+		size_t *new_session_context_size
 		);
 
 

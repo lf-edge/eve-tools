@@ -20,7 +20,9 @@ google::protobuf::uint32 readHdr(char *buf)
   google::protobuf::io::ArrayInputStream ais(buf,4);
   CodedInputStream coded_input(&ais);
   coded_input.ReadVarint32(&size);
+#ifdef VERBOSE
   cout<<"size of payload is "<<size<<endl;
+#endif //VERBOSE
   return size;
 }
 
@@ -46,7 +48,9 @@ int sendrecv(const char *data_to_send, int data_len, int *length, char **resp) {
 	const char* server_name = "10.1.0.1";
 	const int server_port = 8877;
 
+#ifdef VERBOSE
 	cout << "Sending " << data_len << "bytes" << std::endl;
+#endif //VERBOSE
 
 	struct sockaddr_in server_address;
 	memset(&server_address, 0, sizeof(server_address));
@@ -80,7 +84,9 @@ int sendrecv(const char *data_to_send, int data_len, int *length, char **resp) {
         char *pbuffer = hdr_buffer;
         bytecount = recv(sock, pbuffer, hdrlen, MSG_PEEK);
         if (bytecount > 0) {
+#ifdef VERBOSE
              cout << "Received new response, and parsed the hdr" << std::endl;
+#endif //VERBOSE
              return readMessage(sock, readHdr(hdr_buffer), resp, length);
         }
 
