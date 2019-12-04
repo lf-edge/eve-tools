@@ -111,7 +111,7 @@ __eve_tpm_service_activate_credential(
 		size_t *new_session_context_size
 		) {
 
-    INITIALIZE("tpm2_activatecredential -c 0x%x -C 0x%x -i %s -o %s -P\"session:%s\"");
+    INITIALIZE("tpm2_activatecredential -c 0x%x -C 0x%x -i %s -o %s -Psession:%s");
     ADD_INPUT(cred_blob, cred_blob_size);
     ADD_INPUT(session_context, session_context_size);
     ADD_OUTPUT(cert_info);
