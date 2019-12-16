@@ -188,8 +188,10 @@ eve_tpm_service_readpublic(
 extern int
 eve_tpm_service_hmac(
 		uint32_t key_handle,              //IN
+		uint8_t *key_context,             //IN
+		size_t key_context_size,          //IN
 		HASH hash,                        //IN
-		const uint8_t *data_to_be_signed,       //IN
+		const uint8_t *data_to_be_signed, //IN
 		size_t data_to_be_signed_size,    //IN
 		uint8_t **digest,                 //OUT
 		size_t *digest_size               //OUT

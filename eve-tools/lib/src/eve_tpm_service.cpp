@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <stdio.h>
-#include <stdint.h>	
+#include <stdint.h>
 #include <iostream>
 #include "api.pb.h"
 #include "eve_tpm_service.h"
@@ -16,7 +16,7 @@ using namespace std;
 using namespace google::protobuf::io;
 
 static inline char *
-prepare_payload (eve_tools::EveTPMRequest &request,  //IN 
+prepare_payload (eve_tools::EveTPMRequest &request,  //IN
 		char **payload,                      //OUT
 		size_t *payload_size)                //OUT
 {
@@ -95,7 +95,7 @@ parse_response_buffer (char *payload,
             *output_buf  = (uint8_t*)new char[str.length()]; \
 	    memcpy(*output_buf, str.c_str(), str.length()); \
 	    *output_buf##_size = str.length(); \
-	} while (0); 
+	} while (0);
 
 static int
 __eve_tpm_service_activate_credential(
@@ -253,7 +253,7 @@ __eve_tpm_service_createprimary(
 		) {
 	INITIALIZE("tpm2_createprimary -C %s -G %s -g %s -c %s");
 	ADD_OUTPUT(context);
-	PREP_TPM_CMD(hierarchy_to_str(hierarchy), alg_to_str(algorithm), 
+	PREP_TPM_CMD(hierarchy_to_str(hierarchy), alg_to_str(algorithm),
 	             hash_to_str(hash), "context");
 	SEND_TO_SERVER();
 	PARSE_RESPONSE();
@@ -272,7 +272,7 @@ __eve_tpm_service_createek(
 		) {
 	INITIALIZE("tpm2_createek -c 0x%x -G %s -u %s -f %s");
 	ADD_OUTPUT(key_public);
-	PREP_TPM_CMD(persistent_handle, alg_to_str(algorithm), 
+	PREP_TPM_CMD(persistent_handle, alg_to_str(algorithm),
 	             "key_public", pubkeyformat_to_str(kformat));
 	SEND_TO_SERVER();
 	PARSE_RESPONSE();
@@ -311,16 +311,19 @@ __eve_tpm_service_readpublic(
 static int
 __eve_tpm_service_hmac(
 		uint32_t key_handle,              //IN
+		uint8_t *key_context,
+		size_t key_context_size,
 		HASH hash,                        //IN
 		const uint8_t *data_to_be_signed, //IN
 		size_t data_to_be_signed_size,    //IN
 		uint8_t **digest,                 //OUT
 		size_t *digest_size               //OUT
 		) {
-	INITIALIZE("tpm2_hmac -c 0x%X -g %s -o %s %s");
+	INITIALIZE("tpm2_hmac -c %s -g %s -o %s %s");
 	ADD_INPUT(data_to_be_signed, data_to_be_signed_size);
+	ADD_INPUT(key_context, key_context_size);
 	ADD_OUTPUT(digest);
-	PREP_TPM_CMD(key_handle, hash_to_str(hash), 
+	PREP_TPM_CMD("key_context", hash_to_str(hash),
 		      "digest", "data_to_be_signed");
 	SEND_TO_SERVER();
 	PARSE_RESPONSE();
@@ -523,6 +526,8 @@ eve_tpm_service_readpublic(
 int
 eve_tpm_service_hmac(
 		uint32_t key_handle,              //IN
+		uint8_t *key_context,
+		size_t key_context_size,
 		HASH hash,                        //IN
 		const uint8_t *data_to_be_signed, //IN
 		size_t data_to_be_signed_size,    //IN
@@ -532,6 +537,8 @@ eve_tpm_service_hmac(
 {
 	return __eve_tpm_service_hmac(
 			key_handle,
+			key_context,
+			key_context_size,
 			hash,
 			data_to_be_signed,
 			data_to_be_signed_size,

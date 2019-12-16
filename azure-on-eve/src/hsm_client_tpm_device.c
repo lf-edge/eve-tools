@@ -34,9 +34,9 @@ typedef struct HSM_CLIENT_INFO_TAG
     uint8_t *srk_pub;
     size_t srk_pub_size;
 
-    TPM2B_PUBLIC id_key_public;
-    TPM2B_PRIVATE id_key_dup_blob;
-    TPM2B_PRIVATE id_key_priv;
+    uint8_t *dps_key_context;
+    size_t dps_key_context_size;
+
 } HSM_CLIENT_INFO;
 
 
@@ -205,6 +205,7 @@ prepare_cred_blob(TPM2B_ID_OBJECT *enc_key_blob,
 }
 static int insert_key_in_tpm
 (
+    HSM_CLIENT_HANDLE handle,
     const unsigned char* key,
     size_t key_len
 )
@@ -285,17 +286,14 @@ static int insert_key_in_tpm
 			 kdf_seed, kdf_seed_size, 
 			 &private_key, &private_key_size);
 	free(encryption_key);
-	
-	LOG_INFO("Storing the activated key persistently using TPM service...");
-	uint8_t *loaded_key_context = NULL;
-	size_t  loaded_key_context_size = 0;
+
+	HSM_CLIENT_INFO *client = (HSM_CLIENT_INFO *)handle;
 	eve_tpm_service_load(TPM_20_SRK_HANDLE,
 			public_key, public_key_size,
 			private_key, private_key_size,
-			&loaded_key_context, &loaded_key_context_size);
-	eve_tpm_service_evictcontrol(DPS_ID_KEY_HANDLE, NULL, 0);
-	eve_tpm_service_evictcontrol(DPS_ID_KEY_HANDLE, loaded_key_context, loaded_key_context_size);
-	free(loaded_key_context);
+			&client->dps_key_context,
+			&client->dps_key_context_size);
+        free(private_key);
 
 	return result;
 }
@@ -376,7 +374,7 @@ static int hsm_client_tpm_activate_identity_key
     }
     else
     {
-        if (insert_key_in_tpm(key, key_len))
+        if (insert_key_in_tpm(handle, key, key_len))
         {
             LOG_ERROR("Failure inserting key into tpm");
             result = __FAILURE__;
@@ -463,8 +461,9 @@ static int hsm_client_tpm_sign_data
         result = __FAILURE__;
     }
 
+    HSM_CLIENT_INFO *client = (HSM_CLIENT_INFO *)handle;
     LOG_INFO("HMAC-Signing the given message using TPM service...");
-    eve_tpm_service_hmac(DPS_ID_KEY_HANDLE, EVE_SHA256,
+    eve_tpm_service_hmac(DPS_ID_KEY_HANDLE, client->dps_key_context, client->dps_key_context_size,EVE_SHA256,
 		    data_to_be_signed, data_to_be_signed_size,
 		    digest, digest_size);
 
