@@ -22,9 +22,8 @@
 
 #define TPM_MAX_DATA_LENGTH 4096
 
-static const uint32_t TPM_20_SRK_HANDLE = 0x81000001;
-static const uint32_t TPM_20_EK_HANDLE =  0x81010001;
-static const uint32_t DPS_ID_KEY_HANDLE = 0x81000100;
+static const uint32_t TPM_20_EK_HANDLE =  0x81000001;
+static const uint32_t TPM_20_SRK_HANDLE = 0x81000002;
 
 typedef struct HSM_CLIENT_INFO_TAG
 {
@@ -463,7 +462,7 @@ static int hsm_client_tpm_sign_data
 
     HSM_CLIENT_INFO *client = (HSM_CLIENT_INFO *)handle;
     LOG_INFO("HMAC-Signing the given message using TPM service...");
-    eve_tpm_service_hmac(DPS_ID_KEY_HANDLE, client->dps_key_context, client->dps_key_context_size,EVE_SHA256,
+    eve_tpm_service_hmac(client->dps_key_context, client->dps_key_context_size,EVE_SHA256,
 		    data_to_be_signed, data_to_be_signed_size,
 		    digest, digest_size);
 
