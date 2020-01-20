@@ -310,9 +310,8 @@ __eve_tpm_service_readpublic(
 
 static int
 __eve_tpm_service_hmac(
-		uint32_t key_handle,              //IN
-		uint8_t *key_context,
-		size_t key_context_size,
+		uint8_t *key_context,             //IN
+		size_t key_context_size,          //IN
 		HASH hash,                        //IN
 		const uint8_t *data_to_be_signed, //IN
 		size_t data_to_be_signed_size,    //IN
@@ -525,9 +524,8 @@ eve_tpm_service_readpublic(
 
 int
 eve_tpm_service_hmac(
-		uint32_t key_handle,              //IN
-		uint8_t *key_context,
-		size_t key_context_size,
+		uint8_t *key_context,             //IN
+		size_t key_context_size,          //IN
 		HASH hash,                        //IN
 		const uint8_t *data_to_be_signed, //IN
 		size_t data_to_be_signed_size,    //IN
@@ -536,7 +534,6 @@ eve_tpm_service_hmac(
 		)
 {
 	return __eve_tpm_service_hmac(
-			key_handle,
 			key_context,
 			key_context_size,
 			hash,
@@ -545,5 +542,5 @@ eve_tpm_service_hmac(
 			digest,
 			digest_size);
 }
-}
+} //extern "C"
 
