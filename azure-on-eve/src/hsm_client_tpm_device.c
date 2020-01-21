@@ -24,6 +24,7 @@
 
 static const uint32_t TPM_20_EK_HANDLE =  0x81000001;
 static const uint32_t TPM_20_SRK_HANDLE = 0x81000002;
+static const uint32_t TPM_20_RH_ENDORSEMENT =  0x4000000B;
 
 typedef struct HSM_CLIENT_INFO_TAG
 {
@@ -38,6 +39,12 @@ typedef struct HSM_CLIENT_INFO_TAG
 
 } HSM_CLIENT_INFO;
 
+#define RETURN_IF_FAILS(func)     \
+	do {                      \
+	    int rc = (func);    \
+	    if (rc != 0)          \
+                return rc;        \
+        }while(0)                \
 
 #define DPS_UNMARSHAL(Type, pValue) \
 {                                                                       \
@@ -202,6 +209,7 @@ prepare_cred_blob(TPM2B_ID_OBJECT *enc_key_blob,
 	return 0;
 
 }
+
 static int insert_key_in_tpm
 (
     HSM_CLIENT_HANDLE handle,
@@ -259,12 +267,13 @@ static int insert_key_in_tpm
 	size_t private_key_size = 0;
 	
 	LOG_INFO("Activating the provided symmetric key using TPM Service...");
-	prepare_cred_blob(&enc_key_blob, &tpm_enc_secret,
-			&cred_blob, &cred_blob_size);
-	eve_tpm_service_startauthsession(&session_context, &session_context_size);
-        eve_tpm_service_policysecret(session_context, session_context_size, 0x4000000B,
-			&session_context, &session_context_size);
-	eve_tpm_service_activate_credential(
+	RETURN_IF_FAILS(prepare_cred_blob(&enc_key_blob, &tpm_enc_secret,
+			&cred_blob, &cred_blob_size));
+	RETURN_IF_FAILS(eve_tpm_service_startauthsession(&session_context, &session_context_size));
+        RETURN_IF_FAILS(eve_tpm_service_policysecret(session_context,
+				session_context_size, TPM_20_RH_ENDORSEMENT,
+			        &session_context, &session_context_size));
+	RETURN_IF_FAILS(eve_tpm_service_activate_credential(
 			session_context,
 			session_context_size,
 			TPM_20_SRK_HANDLE, 
@@ -274,26 +283,25 @@ static int insert_key_in_tpm
 			&encryption_key,
 			&encryption_key_size,
 			&session_context,
-			&session_context_size); 
-        eve_tpm_service_flushcontext(session_context, session_context_size);
+			&session_context_size)); 
+        RETURN_IF_FAILS(eve_tpm_service_flushcontext(session_context, session_context_size));
 	free(cred_blob);
 
-        eve_tpm_service_import(TPM_20_SRK_HANDLE,
+        RETURN_IF_FAILS(eve_tpm_service_import(TPM_20_SRK_HANDLE,
 			 encryption_key, encryption_key_size,
 			 public_key, public_key_size,
 			 duplicate_key_blob, duplicate_key_blob_size,
 			 kdf_seed, kdf_seed_size, 
-			 &private_key, &private_key_size);
+			 &private_key, &private_key_size));
 	free(encryption_key);
 
 	HSM_CLIENT_INFO *client = (HSM_CLIENT_INFO *)handle;
-	eve_tpm_service_load(TPM_20_SRK_HANDLE,
+	RETURN_IF_FAILS(eve_tpm_service_load(TPM_20_SRK_HANDLE,
 			public_key, public_key_size,
 			private_key, private_key_size,
 			&client->dps_key_context,
-			&client->dps_key_context_size);
+			&client->dps_key_context_size));
         free(private_key);
-
 	return result;
 }
 
@@ -301,30 +309,11 @@ static int initialize_tpm_device(HSM_CLIENT_INFO *handle)
 {
     int result = 0;
     LOG_INFO("Reading endorsement key using TPM Service...");
-    eve_tpm_service_readpublic(TPM_20_EK_HANDLE, NULL, 0, TSS, &handle->ek_pub,
-		                &handle->ek_pub_size); 
-    if (handle->ek_pub == NULL) {
-    	    LOG_INFO("No EK found. Generating endorsement key using TPM Service...");
-	    eve_tpm_service_createek(TPM_20_EK_HANDLE, RSA, TSS, &handle->ek_pub, 
-			             &handle->ek_pub_size); 
-    }
+    RETURN_IF_FAILS(eve_tpm_service_readpublic(TPM_20_EK_HANDLE, NULL, 0, TSS, &handle->ek_pub,
+		                &handle->ek_pub_size)); 
     LOG_INFO("Reading storage key(pub) using TPM service...");
-    eve_tpm_service_readpublic(TPM_20_SRK_HANDLE, NULL, 0, TSS, &handle->srk_pub,
-		                    &handle->srk_pub_size); 
-    if (handle->srk_pub == NULL) {
-	    uint8_t *srk_context = NULL;
-	    size_t srk_context_size = 0;
-    	    LOG_INFO("No SRK found. Generating storage key using TPM Service...");
-	    eve_tpm_service_createprimary(TPM_20_SRK_HANDLE, ENDORSEMENT, RSA, EVE_SHA256,
-			                  &srk_context, &srk_context_size);
-	    if (srk_context != NULL) {
-		eve_tpm_service_evictcontrol(TPM_20_SRK_HANDLE, srk_context,
-				             srk_context_size);
-                eve_tpm_service_readpublic(TPM_20_SRK_HANDLE, NULL, 0, TSS, 
-				           &handle->srk_pub, &handle->srk_pub_size); 
-		free(srk_context);
-	    }
-    }
+    RETURN_IF_FAILS(eve_tpm_service_readpublic(TPM_20_SRK_HANDLE, NULL, 0, TSS, &handle->srk_pub,
+		                    &handle->srk_pub_size)); 
     return result;
 }
 
@@ -462,9 +451,9 @@ static int hsm_client_tpm_sign_data
 
     HSM_CLIENT_INFO *client = (HSM_CLIENT_INFO *)handle;
     LOG_INFO("HMAC-Signing the given message using TPM service...");
-    eve_tpm_service_hmac(client->dps_key_context, client->dps_key_context_size,EVE_SHA256,
+    RETURN_IF_FAILS(eve_tpm_service_hmac(client->dps_key_context, client->dps_key_context_size,EVE_SHA256,
 		    data_to_be_signed, data_to_be_signed_size,
-		    digest, digest_size);
+		    digest, digest_size));
 
     return result;
 }

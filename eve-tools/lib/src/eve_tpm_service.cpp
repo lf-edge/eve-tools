@@ -243,45 +243,6 @@ __eve_tpm_service_policysecret(
 }
 
 static int
-__eve_tpm_service_createprimary(
-		uint32_t persistent_handle,       //IN
-		HEIRARCHY hierarchy,              //IN
-		ALG algorithm,                    //IN
-		HASH hash,                        //IN
-		uint8_t **context,                //OUT
-		size_t *context_size              //OUT
-		) {
-	INITIALIZE("tpm2_createprimary -C %s -G %s -g %s -c %s");
-	ADD_OUTPUT(context);
-	PREP_TPM_CMD(hierarchy_to_str(hierarchy), alg_to_str(algorithm),
-	             hash_to_str(hash), "context");
-	SEND_TO_SERVER();
-	PARSE_RESPONSE();
-        EXTRACT_OUTPUT(context);
-
-    return 0;
-}
-
-static int
-__eve_tpm_service_createek(
-		uint32_t persistent_handle,       //IN
-		ALG algorithm,                    //IN
-		PUB_KEYOUT_FORMAT kformat,         //IN
-		uint8_t **key_public,             //OUT
-		size_t *key_public_size           //OUT
-		) {
-	INITIALIZE("tpm2_createek -c 0x%x -G %s -u %s -f %s");
-	ADD_OUTPUT(key_public);
-	PREP_TPM_CMD(persistent_handle, alg_to_str(algorithm),
-	             "key_public", pubkeyformat_to_str(kformat));
-	SEND_TO_SERVER();
-	PARSE_RESPONSE();
-        EXTRACT_OUTPUT(key_public);
-
-    return 0;
-}
-
-static int
 __eve_tpm_service_readpublic(
 		uint32_t handle,                  //IN
 		uint8_t *context,                 //IN
@@ -465,42 +426,6 @@ eve_tpm_service_policysecret(
 			object_handle,
 			new_session_context,
 			new_session_context_size);
-}
-
-int
-eve_tpm_service_createprimary(
-		uint32_t persistent_handle,       //IN
-		HEIRARCHY hierarchy,              //IN
-		ALG algorithm,                    //IN
-		HASH hash,                        //IN
-		uint8_t **context,                //OUT
-		size_t *context_size              //OUT
-		)
-{
-	return __eve_tpm_service_createprimary(
-			persistent_handle,
-			hierarchy,
-			algorithm,
-			hash,
-			context,
-			context_size);
-}
-
-int
-eve_tpm_service_createek(
-		uint32_t persistent_handle,       //IN
-		ALG algorithm,                    //IN
-		PUB_KEYOUT_FORMAT format,         //IN
-		uint8_t **key_public,             //OUT
-		size_t *key_public_size           //OUT
-		)
-{
-	return __eve_tpm_service_createek(
-			persistent_handle,
-			algorithm,
-			format,
-			key_public,
-			key_public_size);
 }
 
 int

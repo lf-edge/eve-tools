@@ -157,25 +157,6 @@ hierarchy_to_str(HEIRARCHY h)
 }
 
 extern int
-eve_tpm_service_createprimary(
-		uint32_t persistent_handle,       //IN
-		HEIRARCHY hierarchy,              //IN
-		ALG algorithm,                    //IN
-		HASH hash,                        //IN
-		uint8_t **context,                //OUT
-		size_t *context_size    	  //OUT
-		);
-
-extern int
-eve_tpm_service_createek(
-		uint32_t persistent_handle,       //IN
-		ALG algorithm,                    //IN
-		PUB_KEYOUT_FORMAT format,         //IN
-		uint8_t **key_public,             //OUT
-		size_t *key_public_size           //OUT
-		);
-
-extern int
 eve_tpm_service_readpublic(
 		uint32_t handle,                  //IN
 		uint8_t *context,                 //IN
