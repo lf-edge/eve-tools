@@ -51,14 +51,6 @@ eve_tpm_service_load(
 
 
 extern int
-eve_tpm_service_evictcontrol(
-		uint32_t persistent_handle,         //IN
-		uint8_t *object_context,            //IN
-		size_t object_context_size          //IN
-		);
-
-
-extern int
 eve_tpm_service_startauthsession(
 		uint8_t **session_context,          //OUT
 		size_t *session_context_size        //OUT

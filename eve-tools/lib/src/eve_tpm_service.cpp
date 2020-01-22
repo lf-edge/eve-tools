@@ -179,23 +179,6 @@ __eve_tpm_service_load(
 }
 
 static int
-__eve_tpm_service_evictcontrol(
-		uint32_t persistent_handle,         //IN
-		uint8_t *object_context,            //IN
-		size_t object_context_size          //IN
-		) {
-    INITIALIZE("tpm2_evictcontrol -c %s 0x%x");
-    if (object_context) {
-        ADD_INPUT(object_context, object_context_size);
-    }
-    PREP_TPM_CMD(object_context ? "object_context": "",
-		    persistent_handle);
-    SEND_TO_SERVER();
-
-    return 0;
-}
-
-static int
 __eve_tpm_service_startauthsession(
 		uint8_t **session_context,          //OUT
 		size_t *session_context_size        //OUT
@@ -372,20 +355,6 @@ eve_tpm_service_load(
 			key_private_size,
 			loaded_key_context,
 			loaded_key_context_size);
-}
-
-
-int
-eve_tpm_service_evictcontrol(
-		uint32_t persistent_handle,         //IN
-		uint8_t *object_context,            //IN
-		size_t object_context_size          //IN
-		)
-{
-	return __eve_tpm_service_evictcontrol(
-			persistent_handle,
-			object_context,
-			object_context_size);
 }
 
 
