@@ -48,20 +48,12 @@ std::list<string> cmds_w_file_operands = {
 //The holder for various commands we support.
 //TBD, read this data from a yaml file instead?
 static file_mapping file_mappings[] = { 
-{ "tpm2_createek", "-c", FILENAME, OUT },
-{ "tpm2_createek", "-u", DONTCARE, OUT },
-{ "tpm2_createek", "-t", DONTCARE, IN  },
-{ "tpm2_createak", "-c", FILENAME, OUT },
-{ "tpm2_createak", "-C", FILENAME, IN },
-{ "tpm2_createak", "-n", DONTCARE, OUT },
-{ "tpm2_createak", "-r", DONTCARE, OUT },
 { "tpm2_sign",     "-t", DONTCARE, IN  },
 { "tpm2_sign",     "-o", DONTCARE, OUT },
 { "tpm2_sign",     "-c", FILENAME, IN },
 { "tpm2_hash",     "-t", DONTCARE, OUT },
 { "tpm2_hash",     "-o", DONTCARE, OUT },
 { "tpm2_createprimary",     "-c", DONTCARE, OUT },
-{ "tpm2_evictcontrol",     "-c", FILENAME, IN },
 { "tpm2_readpublic",     "-c", FILENAME, IN },
 { "tpm2_readpublic",     "-o", DONTCARE, OUT},
 { "tpm2_startauthsession",     "-S", DONTCARE, OUT},
