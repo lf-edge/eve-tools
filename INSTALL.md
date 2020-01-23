@@ -2,7 +2,15 @@
 
 ## On Linux
 
-### On Debian/Ubuntu
+### Installing on Debian/Ubuntu
+The dpkg files are available the respective release artifacts page.
+e.g. to install v1.0.0 version of lfedge-eve-tools on Debian, follow these steps:
+`wget https://github.com/cshari-zededa/lfedge-eve-tools/releases/download/v1.0.0/cshari-zededa.list`
+`sudo cp cshari-zededa.list /etc/apt/sources.list.d/`
+`sudo apt update`
+`sudo apt install lfedge-eve-tools`
+
+### Building On Debian/Ubuntu
 
 #### 1. Install the prerequisite libraries:
 `sudo apt-get install -y docker.io libprotobuf-dev libprotoc-dev protobuf-compiler cmake g++ libssl-dev libcurl4-openssl-dev uuid-dev`
