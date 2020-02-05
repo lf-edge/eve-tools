@@ -3,11 +3,11 @@
 
 ## On Linux
 
-### Installing on Debian/Ubuntu
+### Installing on Ubuntu
 
 The dpkg files are available the respective release artifacts page. 
 
-e.g. to install v1.0.0 version of lfedge-eve-tools on Debian, follow these steps:
+e.g. to install v1.0.0 version of lfedge-eve-tools on Ubuntu, follow these steps:
 
 `wget https://github.com/cshari-zededa/lfedge-eve-tools/releases/download/v1.0.0/cshari-zededa.list`
 
