@@ -14,6 +14,8 @@
 using namespace std;
 using namespace google::protobuf::io;
 
+#define MAX_IPADDR_LEN 256
+
 google::protobuf::uint32 readHdr(char *buf)
 {
   google::protobuf::uint32 size;
@@ -42,15 +44,42 @@ int readMessage(int sock, google::protobuf::uint32 size, char **buf, int *buflen
 	return 0;
 }
 
+static char *
+fetchDefaultGateway(bool refetch)
+{
+    static char gateway[MAX_IPADDR_LEN] = {0x0};
+    static bool cached = false;
+    char line[MAX_IPADDR_LEN] = {0x0};
+
+    if (cached && !refetch) {
+	    return gateway;
+    }
+
+    FILE* fp = popen("route -n | grep 'UG[ \t]' | grep '[ \t]0.0.0.0[ \t]' | awk '{printf \"%s\", $2}'", "r");
+
+    if(fgets(line, sizeof(line), fp) != NULL) {
+	strncpy(gateway, line, MAX_IPADDR_LEN);
+	cached = true;
+    }
+
+    pclose(fp);
+    return gateway;
+}
 
 int sendrecv(const char *data_to_send, int data_len, int *length, char **resp) {
 	//TBD: Move these to #defines or arguments
-	const char* server_name = "10.1.0.1";
+	const char* server_name = fetchDefaultGateway(false);
 	const int server_port = 8877;
 
 #ifdef VERBOSE
 	cout << "Sending " << data_len << "bytes" << std::endl;
+	cout << "server_name is " << server_name << std::endl;
 #endif //VERBOSE
+
+	if (server_name == NULL) {
+		cout << "Unable to fetch default gateway IP address" << std::endl;
+		return -1;
+	}
 
 	struct sockaddr_in server_address;
 	memset(&server_address, 0, sizeof(server_address));
@@ -71,11 +100,15 @@ int sendrecv(const char *data_to_send, int data_len, int *length, char **resp) {
 	if (connect(sock, (struct sockaddr*)&server_address,
 	            sizeof(server_address)) < 0) {
 		cout << "Could not connect to server" << std::endl;
+		fetchDefaultGateway(true);
 		return -1;
 	}
 
 	// send
-	send(sock, data_to_send, data_len, 0);
+	if (send(sock, data_to_send, data_len, 0) < 0) {
+		cout << "Sending to server failed" << std::endl;
+		return -1;
+	}
 
 	// receive
 	int bytecount = 0;
