@@ -1,0 +1,30 @@
+From 3a3f92fb0136a83f351a35532f3f190746423305 Mon Sep 17 00:00:00 2001
+From: Hariharasubramanian C S <cshari@zededa.com>
+Date: Wed, 9 Dec 2020 06:22:52 -0800
+Subject: [PATCH] Use "EVEEVEEVE" instead of "KVMKVMKVM" to check for KVM
+
+To check for KVM presence, while running on EVE, use
+"EVEEVEEVE" as the signature to compare, instead of
+"KVMKVMKVM".
+
+Signed-off-by: Hariharasubramanian C S <cshari@zededa.com>
+---
+ arch/x86/kernel/kvm.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/x86/kernel/kvm.c b/arch/x86/kernel/kvm.c
+index 23708b4a38fc..8d5cdd9ef29c 100644
+--- a/arch/x86/kernel/kvm.c
++++ b/arch/x86/kernel/kvm.c
+@@ -547,7 +547,7 @@ static noinline uint32_t __kvm_cpuid_base(void)
+ 		return 0;	/* So we don't blow up on old processors */
+ 
+ 	if (boot_cpu_has(X86_FEATURE_HYPERVISOR))
+-		return hypervisor_cpuid_base("KVMKVMKVM\0\0\0", 0);
++		return hypervisor_cpuid_base("EVEEVEEVE\0\0\0", 0);
+ 
+ 	return 0;
+ }
+-- 
+2.17.1
+
