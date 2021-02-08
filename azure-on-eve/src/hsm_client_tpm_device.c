@@ -21,6 +21,8 @@
 
 
 #define TPM_MAX_DATA_LENGTH 4096
+#define PRIVATE_KEY_BACKUP_FILE "/var/lib/iotedge/cache/backup_private_key"
+#define PUBLIC_KEY_BACKUP_FILE "/var/lib/iotedge/cache/backup_public_key"
 
 static const uint32_t TPM_20_EK_HANDLE =  0x81000001;
 static const uint32_t TPM_20_SRK_HANDLE = 0x81000002;
@@ -84,7 +86,14 @@ typedef struct HSM_CLIENT_INFO_TAG
         curr_pos += arrSize;                         \
     }
 
-#if 0
+
+/**
+ * Given a file, return its size in bytes
+ * @param filename
+ *  Name of the file, including its absolute path
+ * @return
+ *  size of the file in bytes, 0 if file is not found
+ */
 static size_t
 size_of_file (const char *filename)
 {
@@ -98,23 +107,112 @@ size_of_file (const char *filename)
 	return (size_t)lSize;
 }
 
-static int
+/**
+ * Reads size bytes from a file, continuing on EINTR short reads.
+ * @param f
+ *  The file to read from.
+ * @param data
+ *  The data buffer to read into.
+ * @param size
+ *  The size of the buffer, which is also the amount of bytes to read.
+ * @return
+ *  True on success, False otherwise.
+ */
+static bool read_bytes_from_file(FILE *f, unsigned char *data, size_t size) {
+
+    size_t bread = 0;
+    size_t index = 0;
+    do {
+        bread = fread(&data[index], 1, size, f);
+        if (bread != size) {
+            if (feof(f) || (errno != EINTR)) {
+                return false;
+            }
+            /* continue on EINTR */
+        }
+        size -= bread;
+        index += bread;
+    } while (size > 0);
+
+    return true;
+}
+
+
+/**
+ * Given filename,  read the whole of the file, and return the content
+ * @param filename
+ *  Name of the file to read
+ * @param buflen
+ *  Number of bytes read from the file
+ * @param buf
+ *  Buffer holding the content. Required memory is allocated by this function
+ *  Caller should free the buffer memory after use
+ * @return
+ *  success or failure as boolean
+ */
+static bool
 read_from_file_to_buf (const char *filename, size_t *buflen, unsigned char **buf)
 {
 	FILE *fp = fopen(filename, "rb");
 	if (!fp) {
-		return 0;
+		return false;
 	}
 	*buflen = size_of_file(filename);
 	*buf = (unsigned char *)malloc(sizeof(char) * (*buflen));
 	if (*buf == NULL) {
-		return -1;
+		return false;
 	}
-	fread(*buf, *buflen, 1, fp);
+	bool result = read_bytes_from_file(fp, *buf, *buflen);
 	fclose(fp);
-	return 0;
+	return result;
 }
-#endif 
+
+/**
+ * Writes size bytes to a file, continuing on EINTR short writes.
+ * @param f
+ *  The file to write to.
+ * @param data
+ *  The data to write.
+ * @param size
+ *  The size, in bytes, of that data.
+ * @return
+ *  True on success, False otherwise.
+ */
+static bool write_bytes_to_file (FILE *f, unsigned char *data, size_t size) {
+
+    size_t wrote = 0;
+    size_t index = 0;
+    do {
+        wrote = fwrite(&data[index], 1, size, f);
+        if (wrote != size) {
+            if (errno != EINTR) {
+                return false;
+            }
+            /* continue on EINTR */
+        }
+        size -= wrote;
+        index += wrote;
+    } while (size > 0);
+
+    return true;
+}
+
+bool write_from_buf_to_file(const char *path, unsigned char *buf, size_t buflen) {
+
+    if (!buf || !path) {
+        return false;
+    }
+
+    FILE *fp = fopen(path, "wb+");
+    if (!fp) {
+        return false;
+    }
+
+    bool result = write_bytes_to_file(fp, buf, buflen);
+
+    fclose(fp);
+    return result;
+}
 
 static bool tpm2_util_is_big_endian(void) {
 
@@ -266,6 +364,16 @@ static int insert_key_in_tpm
 	uint8_t *private_key = NULL;
 	size_t private_key_size = 0;
 	
+	HSM_CLIENT_INFO *client = (HSM_CLIENT_INFO *)handle;
+	//flush existing DPS key, from memory and from TPM
+	//memory will be freed by eve_tpm_service_flushcontext
+	if (client->dps_key_context) {
+		RETURN_IF_FAILS(eve_tpm_service_flushcontext(client->dps_key_context,
+					client->dps_key_context_size));
+		client->dps_key_context = NULL;
+		client->dps_key_context_size = 0;
+	}
+
 	LOG_INFO("Activating the provided symmetric key using TPM Service...");
 	RETURN_IF_FAILS(prepare_cred_blob(&enc_key_blob, &tpm_enc_secret,
 			&cred_blob, &cred_blob_size));
@@ -295,17 +403,25 @@ static int insert_key_in_tpm
 			 &private_key, &private_key_size));
 	free(encryption_key);
 
-	HSM_CLIENT_INFO *client = (HSM_CLIENT_INFO *)handle;
 	RETURN_IF_FAILS(eve_tpm_service_load(TPM_20_SRK_HANDLE,
 			public_key, public_key_size,
 			private_key, private_key_size,
 			&client->dps_key_context,
 			&client->dps_key_context_size));
+	//Save public and private portions in persistent storage
+	//for offline operations
+	if (!write_from_buf_to_file(PRIVATE_KEY_BACKUP_FILE, private_key, private_key_size)) {
+		LOG_ERROR("Failed to backup DPS privisioning key (part 1)");
+	}
+	if (!write_from_buf_to_file(PUBLIC_KEY_BACKUP_FILE, public_key, public_key_size)) {
+		LOG_ERROR("Failed to backup DPS privisioning key (part 2)");
+	}
         free(private_key);
 	return result;
 }
 
-static int initialize_tpm_device(HSM_CLIENT_INFO *handle)
+static int
+initialize_tpm_device(HSM_CLIENT_INFO *handle)
 {
     int result = 0;
     LOG_INFO("Reading endorsement key using TPM Service...");
@@ -314,6 +430,31 @@ static int initialize_tpm_device(HSM_CLIENT_INFO *handle)
     LOG_INFO("Reading storage key(pub) using TPM service...");
     RETURN_IF_FAILS(eve_tpm_service_readpublic(TPM_20_SRK_HANDLE, NULL, 0, TSS, &handle->srk_pub,
 		                    &handle->srk_pub_size)); 
+
+    HSM_CLIENT_INFO *client = (HSM_CLIENT_INFO *)handle;
+    unsigned char *public_key = NULL, *private_key = NULL;
+    size_t public_key_size = 0, private_key_size = 0;
+
+    if (read_from_file_to_buf(PRIVATE_KEY_BACKUP_FILE, &private_key_size, &private_key) &&
+        read_from_file_to_buf(PUBLIC_KEY_BACKUP_FILE, &public_key_size, &public_key)) {
+
+	LOG_INFO("Found a backup DPS key. Loading it in TPM...");
+	int rc = eve_tpm_service_load(TPM_20_SRK_HANDLE,
+			public_key, public_key_size,
+			private_key, private_key_size,
+			&client->dps_key_context,
+			&client->dps_key_context_size);
+	if (rc != 0) {
+		LOG_ERROR("Failed to load backup DPS key into TPM");
+		result = rc;
+	   }
+    }
+    if (public_key) {
+	    free(public_key);
+    }
+    if (private_key) {
+	    free(private_key);
+    }
     return result;
 }
 
