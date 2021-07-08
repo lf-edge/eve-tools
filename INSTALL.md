@@ -33,15 +33,9 @@ e.g. to install v2.0.0 version of lfedge-eve-tools on Ubuntu, follow these steps
   
  #### 4. Then build the EVE specific HSM plugin for Azure IoT Edge:
  
-`cd azure-on-eve`
+`docker build --no-cache . -t <your image name>`
+Copy the aziotd Elf present in root directory of resulting image to your aziot vm.
 
-`mkdir build; cd build`
-
-`cmake -Drun_unittests=OFF -DUSE_TEST_TPM_INTERFACE_IN_MEM=OFF -DBUILD_SHARED=ON -Duse_cppunittest=OFF ..`
-
-`cmake --build`
-
-`sudo cp libiothsm.so* /usr/lib`
 
 #### 5. After this restart IoT Edge Runtime, for the plugin to take effect:
 
