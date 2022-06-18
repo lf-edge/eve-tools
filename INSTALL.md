@@ -9,7 +9,7 @@ The dpkg files are available the respective release artifacts page.
 
 e.g. to install v2.0.0 version of lfedge-eve-tools on Ubuntu, follow these steps:
 
-`wget https://github.com/cshari-zededa/lfedge-eve-tools/releases/download/v2.0.0/cshari-zededa.list`
+`wget https://github.com/lf-edge/eve-tools/releases/download/v3.0.0/cshari-zededa.list`
 
 `sudo cp cshari-zededa.list /etc/apt/sources.list.d/`
 
