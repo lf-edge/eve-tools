@@ -25,23 +25,25 @@ e.g. to install v2.0.0 version of lfedge-eve-tools on Ubuntu, follow these steps
 #### 2. [Install Azure IoT Edge Runtime](https://docs.microsoft.com/en-us/azure/iot-edge/how-to-install-iot-edge-linux)
 
 #### 3. First build EVE TPM API library:
-`cd eve-tools`
-
-`make`
-
-`sudo make install`
+```bash
+cd eve-tools
+make
+sudo make install
+```
   
  #### 4. Then build the EVE specific HSM plugin for Azure IoT Edge:
  
-`cd azure-on-eve`
+```bash
+cd azure-on-eve
+git submodule update --init --recursive
+mkdir build; cd build
+cmake -Drun_unittests=OFF -DUSE_TEST_TPM_INTERFACE_IN_MEM=OFF -DBUILD_SHARED=ON -Duse_cppunittest=OFF ..
+cmake --build .
+sudo cp libiothsm.so* /usr/lib
+```
 
-`mkdir build; cd build`
+Note: if you encountered errors while building the code using OpenSSL 3, you might need to add changes from this [PR](https://github.com/Azure/azure-c-shared-utility/pull/577).
 
-`cmake -Drun_unittests=OFF -DUSE_TEST_TPM_INTERFACE_IN_MEM=OFF -DBUILD_SHARED=ON -Duse_cppunittest=OFF ..`
-
-`cmake --build`
-
-`sudo cp libiothsm.so* /usr/lib`
 
 #### 5. After this restart IoT Edge Runtime, for the plugin to take effect:
 
