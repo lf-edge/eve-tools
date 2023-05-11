@@ -587,7 +587,7 @@ static int hsm_client_tpm_sign_data
         LOG_ERROR("Invalid handle value specified handle: %p, data: %p, data_size: %zu,"
 			" digest: %p, digest_size: %p",
                          handle, data_to_be_signed, data_to_be_signed_size, digest, digest_size);
-        result = __FAILURE__;
+        return __FAILURE__;
     }
 
     HSM_CLIENT_INFO *client = (HSM_CLIENT_INFO *)handle;
