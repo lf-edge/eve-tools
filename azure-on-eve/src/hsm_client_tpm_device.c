@@ -308,7 +308,7 @@ prepare_cred_blob(TPM2B_ID_OBJECT *enc_key_blob,
 
 }
 
-static int insert_key_in_tpm
+int insert_key_in_tpm
 (
     HSM_CLIENT_HANDLE handle,
     const unsigned char* key,
@@ -420,8 +420,7 @@ static int insert_key_in_tpm
 	return result;
 }
 
-static int
-initialize_tpm_device(HSM_CLIENT_INFO *handle)
+int initialize_tpm_device(HSM_CLIENT_INFO *handle)
 {
     int result = 0;
     LOG_INFO("Reading endorsement key using TPM Service...");
@@ -458,7 +457,7 @@ initialize_tpm_device(HSM_CLIENT_INFO *handle)
     return result;
 }
 
-static HSM_CLIENT_HANDLE hsm_client_tpm_create()
+HSM_CLIENT_HANDLE hsm_client_tpm_create()
 {
     HSM_CLIENT_INFO* result;
     result = malloc(sizeof(HSM_CLIENT_INFO));
@@ -479,7 +478,7 @@ static HSM_CLIENT_HANDLE hsm_client_tpm_create()
     return (HSM_CLIENT_HANDLE)result;
 }
 
-static void hsm_client_tpm_destroy(HSM_CLIENT_HANDLE handle)
+void hsm_client_tpm_destroy(HSM_CLIENT_HANDLE handle)
 {
     if (handle != NULL)
     {
@@ -488,7 +487,7 @@ static void hsm_client_tpm_destroy(HSM_CLIENT_HANDLE handle)
     }
 }
 
-static int hsm_client_tpm_activate_identity_key
+int hsm_client_tpm_activate_identity_key
 (
     HSM_CLIENT_HANDLE handle,
     const unsigned char* key,
@@ -516,7 +515,7 @@ static int hsm_client_tpm_activate_identity_key
     return result;
 }
 
-static int hsm_client_tpm_get_endorsement_key
+int hsm_client_tpm_get_endorsement_key
 (
     HSM_CLIENT_HANDLE handle,
     unsigned char** key,
@@ -543,7 +542,7 @@ static int hsm_client_tpm_get_endorsement_key
     return result;
 }
 
-static int hsm_client_tpm_get_storage_key
+int hsm_client_tpm_get_storage_key
 (
     HSM_CLIENT_HANDLE handle,
     unsigned char** key,
@@ -570,7 +569,7 @@ static int hsm_client_tpm_get_storage_key
     return result;
 }
 
-static int hsm_client_tpm_sign_data
+int hsm_client_tpm_sign_data
 (
     HSM_CLIENT_HANDLE handle,
     const unsigned char* data_to_be_signed,
@@ -599,7 +598,7 @@ static int hsm_client_tpm_sign_data
     return result;
 }
 
-static int hsm_client_tpm_derive_and_sign_with_identity
+int hsm_client_tpm_derive_and_sign_with_identity
 (
    HSM_CLIENT_HANDLE handle,
    const unsigned char* data_to_be_signed,
@@ -613,7 +612,7 @@ static int hsm_client_tpm_derive_and_sign_with_identity
     return __FAILURE__;
 }
 
-static void hsm_client_tpm_free_buffer(void* buffer)
+void hsm_client_tpm_free_buffer(void* buffer)
 {
     if (buffer != NULL)
     {
