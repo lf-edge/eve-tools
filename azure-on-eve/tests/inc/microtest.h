@@ -69,7 +69,7 @@
 // Unit Tests //
 ////////////////
 
-#define TEST(name) \
+#define TEST_FUNC(name) \
   void name();\
   namespace {\
     bool __##name = mt::TestsManager::AddTest(name, #name);\
