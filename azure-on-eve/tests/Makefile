@@ -1,4 +1,4 @@
-CFLAGS = -fpermissive -std=c++11 -lstdc++
+CFLAGS = -g -fpermissive -std=c++11 -lstdc++
 BIN = "bin"
 LDLIBS := /usr/lib/libevetools.so
 INC= ./inc ../inc \
@@ -9,15 +9,15 @@ INC= ./inc ../inc \
 
 INC_PARAMS=$(foreach d, $(INC), -I$d)
 
-all: test
+all: $(BIN)/tpm_tests
 
 clean:
 	rm -f ./$(BIN)/*
 
-test: $(BIN)/tmp_tests
-	./$(BIN)/tmp_tests || true
+test: $(BIN)/tpm_tests
+	./run_tests.sh || true
 
-$(BIN)/tmp_tests: tmp_tests.cpp
+$(BIN)/tpm_tests: tpm_tests.cpp
 	@mkdir -p $(BIN)/
 	$(CXX) $(CFLAGS) $(INC_PARAMS) \
 	../deps/c-shared/src/xlogging.c \
@@ -27,4 +27,4 @@ $(BIN)/tmp_tests: tmp_tests.cpp
 	../src/hsm_client_tpm_select.c \
 	../src/hsm_client_tpm_device.c \
 	../src/hsm_log.c \
-	tmp_tests.cpp  -o  $(BIN)/tmp_tests $(LDLIBS)
+	tpm_tests.cpp -o $(BIN)/tpm_tests $(LDLIBS)
