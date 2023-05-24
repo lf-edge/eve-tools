@@ -308,7 +308,7 @@ prepare_cred_blob(TPM2B_ID_OBJECT *enc_key_blob,
 
 }
 
-static int insert_key_in_tpm
+int insert_key_in_tpm
 (
     HSM_CLIENT_HANDLE handle,
     const unsigned char* key,
@@ -319,7 +319,7 @@ static int insert_key_in_tpm
 	TPM2B_ID_OBJECT enc_key_blob;
 	TPM2B_ENCRYPTED_SECRET tpm_enc_secret;
 	TPM2B_PRIVATE id_key_dup_blob;
-	TPM2B_ENCRYPTED_SECRET encrypt_wrap_key;
+	TPM2B_ENCRYPTED_SECRET kdf_seed;
 	TPM2B_PUBLIC id_key_Public;
 
 	uint8_t* curr_pos = (uint8_t*)key;
@@ -330,25 +330,13 @@ static int insert_key_in_tpm
 	DPS_UNMARSHAL(TPM2B_ID_OBJECT, &enc_key_blob);
 	DPS_UNMARSHAL(TPM2B_ENCRYPTED_SECRET, &tpm_enc_secret);
 	DPS_UNMARSHAL(TPM2B_PRIVATE, &id_key_dup_blob);
-	DPS_UNMARSHAL(TPM2B_ENCRYPTED_SECRET, &encrypt_wrap_key);
+	DPS_UNMARSHAL(TPM2B_ENCRYPTED_SECRET, &kdf_seed);
 	DPS_UNMARSHAL_FLAGGED(TPM2B_PUBLIC, &id_key_Public);
 
-	uint8_t duplicate_key_blob[TPM_MAX_DATA_LENGTH];
-	size_t duplicate_key_blob_size = 0;
-	uint8_t *pBuf = duplicate_key_blob;
-	uint16_t buflen = 0;
-	size_t max_len = TPM_MAX_DATA_LENGTH;
-	DPS_MARSHAL(TPM2B_PRIVATE, &id_key_dup_blob, pBuf, max_len);
-	duplicate_key_blob_size = buflen;
-
-	uint8_t kdf_seed[TPM_MAX_DATA_LENGTH];
-	size_t kdf_seed_size = 0;
-	pBuf = kdf_seed;
-	buflen = 0;
-	DPS_MARSHAL(TPM2B_ENCRYPTED_SECRET, &encrypt_wrap_key, pBuf, max_len);
-	kdf_seed_size = buflen;
-
 	uint8_t public_key[TPM_MAX_DATA_LENGTH];
+	size_t max_len = TPM_MAX_DATA_LENGTH;
+	uint8_t *pBuf = public_key;
+	uint16_t buflen = 0;
 	size_t public_key_size = 0;
 	pBuf = public_key;
 	buflen = 0;
@@ -398,8 +386,8 @@ static int insert_key_in_tpm
         RETURN_IF_FAILS(eve_tpm_service_import(TPM_20_SRK_HANDLE,
 			 encryption_key, encryption_key_size,
 			 public_key, public_key_size,
-			 duplicate_key_blob, duplicate_key_blob_size,
-			 kdf_seed, kdf_seed_size, 
+			 id_key_dup_blob.t.buffer, id_key_dup_blob.t.size,
+			 kdf_seed.t.secret, kdf_seed.t.size,
 			 &private_key, &private_key_size));
 	free(encryption_key);
 
@@ -420,8 +408,7 @@ static int insert_key_in_tpm
 	return result;
 }
 
-static int
-initialize_tpm_device(HSM_CLIENT_INFO *handle)
+int initialize_tpm_device(HSM_CLIENT_INFO *handle)
 {
     int result = 0;
     LOG_INFO("Reading endorsement key using TPM Service...");
@@ -458,7 +445,7 @@ initialize_tpm_device(HSM_CLIENT_INFO *handle)
     return result;
 }
 
-static HSM_CLIENT_HANDLE hsm_client_tpm_create()
+HSM_CLIENT_HANDLE hsm_client_tpm_create()
 {
     HSM_CLIENT_INFO* result;
     result = malloc(sizeof(HSM_CLIENT_INFO));
@@ -479,7 +466,7 @@ static HSM_CLIENT_HANDLE hsm_client_tpm_create()
     return (HSM_CLIENT_HANDLE)result;
 }
 
-static void hsm_client_tpm_destroy(HSM_CLIENT_HANDLE handle)
+void hsm_client_tpm_destroy(HSM_CLIENT_HANDLE handle)
 {
     if (handle != NULL)
     {
@@ -488,7 +475,7 @@ static void hsm_client_tpm_destroy(HSM_CLIENT_HANDLE handle)
     }
 }
 
-static int hsm_client_tpm_activate_identity_key
+int hsm_client_tpm_activate_identity_key
 (
     HSM_CLIENT_HANDLE handle,
     const unsigned char* key,
@@ -516,7 +503,7 @@ static int hsm_client_tpm_activate_identity_key
     return result;
 }
 
-static int hsm_client_tpm_get_endorsement_key
+int hsm_client_tpm_get_endorsement_key
 (
     HSM_CLIENT_HANDLE handle,
     unsigned char** key,
@@ -543,7 +530,7 @@ static int hsm_client_tpm_get_endorsement_key
     return result;
 }
 
-static int hsm_client_tpm_get_storage_key
+int hsm_client_tpm_get_storage_key
 (
     HSM_CLIENT_HANDLE handle,
     unsigned char** key,
@@ -570,7 +557,7 @@ static int hsm_client_tpm_get_storage_key
     return result;
 }
 
-static int hsm_client_tpm_sign_data
+int hsm_client_tpm_sign_data
 (
     HSM_CLIENT_HANDLE handle,
     const unsigned char* data_to_be_signed,
@@ -599,7 +586,7 @@ static int hsm_client_tpm_sign_data
     return result;
 }
 
-static int hsm_client_tpm_derive_and_sign_with_identity
+int hsm_client_tpm_derive_and_sign_with_identity
 (
    HSM_CLIENT_HANDLE handle,
    const unsigned char* data_to_be_signed,
@@ -613,7 +600,7 @@ static int hsm_client_tpm_derive_and_sign_with_identity
     return __FAILURE__;
 }
 
-static void hsm_client_tpm_free_buffer(void* buffer)
+void hsm_client_tpm_free_buffer(void* buffer)
 {
     if (buffer != NULL)
     {

@@ -142,7 +142,7 @@ __eve_tpm_service_import(
 		uint8_t **private_key,             //OUT
 		size_t *private_key_size           //OUT
 		) {
-    INITIALIZE("tpm2_import -C 0x%x -k encryption_key -u public_key -r private_key -i duplicate_key_blob -s kdf_seed -L dpolicy.dat");
+    INITIALIZE("tpm2_import -C 0x%x -k encryption_key -u public_key -r private_key -i duplicate_key_blob -s kdf_seed");
     ADD_INPUT(encryption_key, encryption_key_size);
     ADD_INPUT(public_key, public_key_size);
     ADD_INPUT(duplicate_key_blob, duplicate_key_size);
