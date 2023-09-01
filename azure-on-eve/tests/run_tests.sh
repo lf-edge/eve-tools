@@ -75,10 +75,12 @@ tpm2_makecredential -Q -T none -e ek.pub -s sym.key -n $(cat srk.name) -o sym.ke
 # make the binary input blob for the test
 dd skip=8 count=$(stat -c %s sym.key.encrypted) if=sym.key.encrypted of=insert_key.bin bs=1
 
-printf "%04x" $(stat -c %s dup.dup) | fold -w2 | tr -d "\n" | xxd -r -p >> insert_key.bin
+# don't need to insert size before the struct, insert_key_in_tpm will marshal the struct
+# and extracts the size.
 cat dup.dup >> insert_key.bin
 
-printf "%04x" $(stat -c %s dup.seed) | fold -w2 | tr -d "\n" | xxd -r -p >> insert_key.bin
+# don't need to insert size before the struct, insert_key_in_tpm will marshal the struct
+# and extracts the size.
 cat dup.seed >> insert_key.bin
 
 printf "%04x" $(stat -c %s dup.pub.tpmt) | fold -w2 | tr -d "\n" | xxd -r -p >> insert_key.bin
