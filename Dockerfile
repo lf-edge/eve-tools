@@ -7,7 +7,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \ 
     apt-get install -y bash libprotobuf-dev libprotoc-dev protobuf-compiler \
                    libssl-dev libcurl4-openssl-dev uuid-dev g++ make cmake \
-                   curl gcc g++ git jq pkg-config libclang1 llvm-dev tree
+                   curl gcc g++ git jq pkg-config libclang1 llvm-dev
 
 # Install Rust & Cargo
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
