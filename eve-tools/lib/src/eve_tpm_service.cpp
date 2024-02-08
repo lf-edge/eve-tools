@@ -90,6 +90,9 @@ parse_response_buffer (char *payload,
 
 #define EXTRACT_OUTPUT(output_buf) \
         do { 								\
+		if (response.outputfiles_size() == 0) { \
+			return -1; \
+		} \
             const eve_tools::File& file = response.outputfiles(i++); \
 	    string str = file.content(); \
             *output_buf  = (uint8_t*)new char[str.length()]; \
