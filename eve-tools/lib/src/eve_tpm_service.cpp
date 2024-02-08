@@ -130,6 +130,33 @@ __eve_tpm_service_activate_credential(
     return 0;
 }
 
+static int
+__eve_tpm_service_import_with_policy(
+		int32_t parent_key_handle,        //IN
+		uint8_t *encryption_key,           //IN
+		size_t encryption_key_size,        //IN
+		uint8_t *public_key,               //IN
+		size_t public_key_size,            //IN
+		uint8_t *duplicate_key_blob,       //IN
+		size_t duplicate_key_size,         //IN
+		uint8_t *kdf_seed,                 //IN
+		size_t kdf_seed_size,              //IN
+		uint8_t **private_key,             //OUT
+		size_t *private_key_size           //OUT
+		) {
+    INITIALIZE("tpm2_import -C 0x%x -k encryption_key -u public_key -r private_key -i duplicate_key_blob -s kdf_seed -L dpolicy.dat");
+    ADD_INPUT(encryption_key, encryption_key_size);
+    ADD_INPUT(public_key, public_key_size);
+    ADD_INPUT(duplicate_key_blob, duplicate_key_size);
+    ADD_INPUT(kdf_seed, kdf_seed_size);
+    ADD_OUTPUT(private_key);
+    PREP_TPM_CMD(parent_key_handle);
+    SEND_TO_SERVER();
+    PARSE_RESPONSE();
+    EXTRACT_OUTPUT(private_key);
+
+    return 0;
+}
 
 static int
 __eve_tpm_service_import(
@@ -145,6 +172,14 @@ __eve_tpm_service_import(
 		uint8_t **private_key,             //OUT
 		size_t *private_key_size           //OUT
 		) {
+
+	if (__eve_tpm_service_import_with_policy(parent_key_handle, encryption_key,
+	encryption_key_size, public_key, public_key_size, duplicate_key_blob, 
+	duplicate_key_size, kdf_seed, kdf_seed_size, private_key, private_key_size) == 0) {
+		return 0;
+	}
+	cout << "Failed to import with policy, trying without policy" << endl;
+	
     INITIALIZE("tpm2_import -C 0x%x -k encryption_key -u public_key -r private_key -i duplicate_key_blob -s kdf_seed");
     ADD_INPUT(encryption_key, encryption_key_size);
     ADD_INPUT(public_key, public_key_size);
