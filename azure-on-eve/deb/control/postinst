@@ -1,0 +1,21 @@
+#!/bin/bash
+echo "Installing libiothsm libraries for iotedge 1.2"
+sudo ln -s /usr/lib/libiothsm.so.1.0.8 /usr/lib/libiothsm.so.1
+sudo ln -s /usr/lib/libiothsm.so.1 /usr/lib/libiothsm.so
+
+# just a print statement
+echo "Installing Azure identity service (aziotd) for iotedge 1.4"
+
+echo "Setting up the file persmissions for iotedge 1.2/1.4"
+sudo chown root:root /usr/bin/eve_run
+sudo chmod 755 /usr/bin/eve_run
+sudo chown root:root /usr/bin/read_ek_public
+sudo chmod 755 /usr/bin/read_ek_public
+sudo chown root:root /usr/include/eve_tpm_service.h
+sudo chmod 644 /usr/include/eve_tpm_service.h
+sudo chown root:root /usr/lib/libevetools.so
+sudo chmod 755 /usr/lib/libevetools.so
+sudo chown root:root /usr/lib/libiothsm.so.1.0.8
+sudo chmod 755 /usr/lib/libiothsm.so.1.0.8
+sudo chown root:root /usr/libexec/aziot-identity-service/aziotd
+sudo chmod 755 /usr/libexec/aziot-identity-service/aziotd
