@@ -65,6 +65,6 @@ FORCE_NO_UNITTEST=1 make
 ```
 
 
-#### 5. After this restart IoT Edge Runtime, for the plugin to take effect:
+#### 6. After this restart IoT Edge Runtime, for the plugin to take effect:
 
 `sudo /etc/init.d/iotedge restart`
