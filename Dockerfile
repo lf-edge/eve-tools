@@ -1,9 +1,12 @@
 # Copyright (c) 2019 Zededa, Inc.
 # SPDX-License-Identifier: Apache-2.0
 FROM ubuntu:20.04 as build
+# This is the commit id of iot-identity-service
 ARG IOTD_COMMIT_ID=15f59c8bd33b1fd8581a74ae6e5ea145c8cb1b9b
-ARG DEBIAN_FRONTEND=noninteractive
 
+# Sometimes apt-get gets stuck asking for user input,
+# set non-interactive mode to avoid this.
+ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \ 
     apt-get install -y bash libprotobuf-dev libprotoc-dev protobuf-compiler \
                    libssl-dev libcurl4-openssl-dev uuid-dev g++ make cmake \
