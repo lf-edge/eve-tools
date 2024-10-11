@@ -21,9 +21,9 @@ the failure either upstream or downstream.
 as seen by the host operating system, for accurate reporting of KPIs to its analytics services.
 
 As a starting point, this codebase implements TPM related services:
-1) A library to provide interface for talking to TPM ASIC on the host operating system (eve-tools/lib)
+1) A library to provide interface for talking to TPM ASIC on the host operating system (eve-tpm-tools/lib)
 2) A customized version of libiothsm.so, to use with Azure IoT Edge Runtime, to use for TPM based DPS provisioning (azure-on-eve)
-3) "eve_run" shell command, which is used to issue a selective set of commands on the host operating system (eve-tools/tools)
+3) "eve_run" shell command, which is used to issue a selective set of TPM commands on the host operating system (eve-tools/tools)
 
 Please refer to INSTALL.md for installation instructions.
 Please open issues for any bugs or improvements. And Pull requests are welcome!
