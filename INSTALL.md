@@ -30,7 +30,7 @@ uuid-dev g++ make cmake curl gcc g++ git jq pkg-config libclang1 llvm-dev
 
 #### 3. Build EVE TPM API library:
 ```bash
-cd eve-tools
+cd eve-tpm-tools
 make
 sudo make install
 ```
@@ -38,7 +38,7 @@ sudo make install
 #### 4. Build the EVE specific HSM plugin for Azure IoT Edge 1.2:
  
 ```bash
-cd azure-on-eve
+cd azure-iot-edge-on-eve
 git submodule update --init --recursive
 mkdir build; cd build
 cmake -Drun_unittests=OFF -DUSE_TEST_TPM_INTERFACE_IN_MEM=OFF -DBUILD_SHARED=ON -Duse_cppunittest=OFF ..
@@ -51,7 +51,7 @@ Note: if you encountered errors while building the code using OpenSSL 3, you mig
 #### 5. Build the EVE specific HSM plugin for Azure IoT Edge 1.4:
  
 ```bash
-cd azure-on-eve/aziotd
+cd azure-iot-edge-on-eve/aziotd
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
 export PATH="$PATH:/root/.cargo/bin"
 cargo install bindgen --version '^0.54'
