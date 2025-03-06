@@ -1,0 +1,32 @@
+// Copyright(c) 2025 Zededa, Inc.
+
+syntax = "proto3";
+
+package org.lfedge.eve.tools.runtimemetrics;
+option go_package  = "github.com/lf-edge/eve-tools/runtimemetrics/go/nestedappinstancemetrics";
+
+// NestedAppStatus is a DomainStatus structure
+// for the Nested App.
+// intended for EVE logging infrastructure to
+// consume and separate runtime log entries for each
+// app instance running inside a runtime and logging
+// to the console.
+message NestedAppStatus {
+  // App Id of the nested app inside the runtime
+  string app_id = 1;
+
+  // App Name is the app instance display name
+  string app_name = 2;
+
+  // Logging has been disabled in the runtime
+  // for this nested app instance inside the runtime
+  bool disable_logs = 3;
+}
+
+// Inventory object returned via an http server
+// running inside a nested app instance runtime on eve.
+message NestedAppInventory {
+  // UUIDs of the nested/virtual AppInstances as provided to the agent
+  // in the Patch Envelope Config
+  repeated NestedAppStatus apps = 1;
+}

@@ -1,0 +1,22 @@
+// Copyright(c) 2025 Zededa, Inc.
+
+syntax = "proto3";
+
+package org.lfedge.eve.tools.runtimemetrics;
+option go_package  = "github.com/lf-edge/eve-tools/runtimemetrics/go/nestedappinstancemetrics";
+
+// This object will be embedded in the content field
+// of the existing app instance log entry.
+message NestedAppInstanceLogMsg {
+  // AppId of the nested app instance / virtual app instance
+  // eg. docker compose app instance ID
+  string nested_app_id = 1;
+
+  // container_name is the shortened name of the container.
+  // eg. compose app container name is project_name-service-replica
+  // this field should contain the service-replica suffix.
+  string container_name = 2;
+
+  // msg is the original log from the runtime container
+  string msg = 3;
+}
