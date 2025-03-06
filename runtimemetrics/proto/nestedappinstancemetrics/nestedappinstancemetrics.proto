@@ -1,0 +1,44 @@
+// Copyright(c) 2025 Zededa, Inc.
+
+syntax = "proto3";
+
+package org.lfedge.eve.tools.runtimemetrics;
+option go_package  = "github.com/lf-edge/eve-tools/runtimemetrics/go/nestedappinstancemetrics";
+
+// NestedAppMetrics object to serve as a metric
+// for a top level appinstance and all containers
+// inside an app instance.  A single parent NestedAppMetrics returned from
+// GET /api/v1/metrics/nested-app-id/<app-id>
+message NestedAppMetrics {
+  // The parent NestedAppMetrics.Id will have an app instance uuid
+  // to show app level metrics where the app is a group of one or more containers.
+  // The child_container_metrics NestedAppMetrics.Id will have a container id
+  // where the prefix matches the parent id.
+  string id = 1;
+
+  string status = 2;  // uptime, pause, stop status
+  uint32 Pids = 3;    // number of PIDs within the container
+
+  // CPU stats
+  int64 uptime = 4;         // unix.nano, time since container starts
+  uint64 CPUTotal = 5;      // container CPU since starts in nanosec
+  uint64 SystemCPUTotal = 6;// total system, user, idle in nanosec
+
+  // Memory stats
+  uint32 UsedMem = 7;      // in MBytes
+  uint32 AllocatedMem = 8; // in MBytes
+
+  // Network stats
+  uint64 TxBytes = 9;  // in Bytes
+  uint64 RxBytes = 10; // in Bytes
+
+  // Disk stats
+  uint64 ReadBytes = 11;  // in MBytes
+  uint64 WriteBytes = 12; // in MBytes
+
+  // Child container metrics
+  // id field should be a container name where the prefix 
+  // is the app instance id / above parent id.  
+  // For a compose app these id fields will be '<appid>-<service>-<replica>'
+  repeated NestedAppMetrics child_container_metrics = 13;
+}

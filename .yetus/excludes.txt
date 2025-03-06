@@ -1,0 +1,10 @@
+yetus-output/*
+CONTRIBUTING.md
+Dockerfile
+.gitmodules
+INSTALL.md
+README.md
+azure-iot-edge-on-eve/*
+azure-on-eve/*
+eve-tpm-tools/*
+guest-improvements/*
