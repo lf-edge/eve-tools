@@ -1,8 +1,6 @@
 module main
 
-go 1.23.0
-
-toolchain go1.23.11
+go 1.25.0
 
 replace github.com/lf-edge/eve/pkg/pillar => /home/shah/shah-dev/eve/pkg/pillar
 
@@ -37,10 +35,10 @@ require (
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/vishvananda/netlink v1.3.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
-	golang.org/x/crypto v0.37.0 // indirect
-	golang.org/x/net v0.39.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
-	golang.org/x/text v0.24.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
+	golang.org/x/net v0.54.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	k8s.io/api v0.29.3 // indirect
