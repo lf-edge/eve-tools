@@ -7,7 +7,7 @@ replace github.com/lf-edge/eve/pkg/pillar => /home/shah/shah-dev/eve/pkg/pillar
 replace github.com/lf-edge/eve-tools/eve-activate-cred/common => ../common
 
 require (
-	github.com/golang-jwt/jwt v3.2.2+incompatible
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/go-tpm v0.9.5
 	github.com/lf-edge/eve-tools/eve-activate-cred/common v0.0.0-00010101000000-000000000000
 	github.com/lf-edge/eve/pkg/pillar v0.0.0-00010101000000-000000000000
