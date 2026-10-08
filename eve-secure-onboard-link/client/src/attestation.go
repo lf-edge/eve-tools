@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/go-tpm/tpmutil"
 	"github.com/lf-edge/eve-tools/eve-activate-cred/common"
-	vcom "github.com/lf-edge/eve/pkg/pillar/vcom/go-api"
+	vcom "github.com/lf-edge/eve/pkg/pillar/vcom/go"
 	"google.golang.org/protobuf/proto"
 )
 

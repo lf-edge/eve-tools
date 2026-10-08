@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	vcom "github.com/lf-edge/eve/pkg/pillar/vcom/go-api"
+	vcom "github.com/lf-edge/eve/pkg/pillar/vcom/go"
 	"golang.org/x/sys/unix"
 )
 

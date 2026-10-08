@@ -16,7 +16,7 @@ import (
 
 	"github.com/google/go-tpm/legacy/tpm2"
 	"github.com/google/go-tpm/legacy/tpm2/credactivation"
-	vcom "github.com/lf-edge/eve/pkg/pillar/vcom/go-api"
+	vcom "github.com/lf-edge/eve/pkg/pillar/vcom/go"
 	"google.golang.org/protobuf/proto"
 )
 

@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/go-tpm/tpmutil"
 	"github.com/google/martian/log"
-	vcom "github.com/lf-edge/eve/pkg/pillar/vcom/go-api"
+	vcom "github.com/lf-edge/eve/pkg/pillar/vcom/go"
 	"golang.org/x/sys/unix"
 	"google.golang.org/protobuf/proto"
 )
