@@ -49,7 +49,7 @@ func vsockNetListener() (net.Listener, error) {
 		return nil, fmt.Errorf("failed to listen on vsock socket: %v", err)
 	}
 
-	fmt.Printf("Listening on vsock CID %d, port %d", addr.CID, addr.Port)
+	fmt.Printf("Listening on vsock CID %d, port %d\n", addr.CID, addr.Port)
 	return &VSOCKListener{fd: sock, addr: addr}, nil
 }
 
@@ -81,12 +81,12 @@ func handleActivateCredParams(w http.ResponseWriter, r *http.Request) {
 
 	var request vcom.TpmRequestActivateCredParams
 	if err := proto.Unmarshal(payload, &request); err != nil {
-		fmt.Printf(handleHTTPError(w, http.StatusBadRequest, "failed to unmarshal request: %v", err))
+		fmt.Println(handleHTTPError(w, http.StatusBadRequest, "failed to unmarshal request: %v", err))
 		return
 	}
 	ek, aik, name, err := tpmGetActivateCredentialParams(tpmutil.Handle(request.Index))
 	if err != nil {
-		fmt.Printf(handleHTTPError(w, http.StatusInternalServerError, "failed to get activate credential params: %v", err))
+		fmt.Println(handleHTTPError(w, http.StatusInternalServerError, "failed to get activate credential params: %v", err))
 		return
 	}
 
@@ -97,7 +97,7 @@ func handleActivateCredParams(w http.ResponseWriter, r *http.Request) {
 	}
 	out, err := proto.Marshal(&resp)
 	if err != nil {
-		fmt.Printf(handleHTTPError(w, http.StatusInternalServerError, "failed to marshal response: %v", err))
+		fmt.Println(handleHTTPError(w, http.StatusInternalServerError, "failed to marshal response: %v", err))
 		return
 	}
 
@@ -115,12 +115,12 @@ func handleActivateCred(w http.ResponseWriter, r *http.Request) {
 
 	var request vcom.TpmRequestGeneratedCred
 	if err := proto.Unmarshal(payload, &request); err != nil {
-		fmt.Printf(handleHTTPError(w, http.StatusBadRequest, "failed to unmarshal request: %v", err))
+		fmt.Println(handleHTTPError(w, http.StatusBadRequest, "failed to unmarshal request: %v", err))
 		return
 	}
 	recoveredCred, err := tpmActivateCredential(tpmutil.Handle(request.AikIndex), request.Cred, request.Secret)
 	if err != nil {
-		fmt.Printf(handleHTTPError(w, http.StatusInternalServerError, "failed to activate credential: %v", err))
+		fmt.Println(handleHTTPError(w, http.StatusInternalServerError, "failed to activate credential: %v", err))
 		return
 	}
 
@@ -129,7 +129,7 @@ func handleActivateCred(w http.ResponseWriter, r *http.Request) {
 	}
 	out, err := proto.Marshal(&resp)
 	if err != nil {
-		fmt.Printf(handleHTTPError(w, http.StatusInternalServerError, "failed to marshal response: %v", err))
+		fmt.Println(handleHTTPError(w, http.StatusInternalServerError, "failed to marshal response: %v", err))
 		return
 	}
 
@@ -147,12 +147,12 @@ func handleReadNV(w http.ResponseWriter, r *http.Request) {
 
 	var request vcom.TpmRequestReadNv
 	if err := proto.Unmarshal(payload, &request); err != nil {
-		fmt.Printf(handleHTTPError(w, http.StatusBadRequest, "failed to unmarshal request: %v", err))
+		fmt.Println(handleHTTPError(w, http.StatusBadRequest, "failed to unmarshal request: %v", err))
 		return
 	}
 	data, err := tpmReadNV(tpmutil.Handle(request.Index))
 	if err != nil {
-		fmt.Printf(handleHTTPError(w, http.StatusInternalServerError, "failed to read NV: %v", err))
+		fmt.Println(handleHTTPError(w, http.StatusInternalServerError, "failed to read NV: %v", err))
 		return
 	}
 
@@ -161,7 +161,7 @@ func handleReadNV(w http.ResponseWriter, r *http.Request) {
 	}
 	out, err := proto.Marshal(&response)
 	if err != nil {
-		fmt.Printf(handleHTTPError(w, http.StatusInternalServerError, "failed to marshal response: %v", err))
+		fmt.Println(handleHTTPError(w, http.StatusInternalServerError, "failed to marshal response: %v", err))
 		return
 	}
 
@@ -179,12 +179,12 @@ func handleSigner(w http.ResponseWriter, r *http.Request) {
 
 	var request vcom.TpmRequestSign
 	if err := proto.Unmarshal(payload, &request); err != nil {
-		fmt.Printf(handleHTTPError(w, http.StatusBadRequest, "failed to unmarshal request: %v", err))
+		fmt.Println(handleHTTPError(w, http.StatusBadRequest, "failed to unmarshal request: %v", err))
 		return
 	}
 	sig, err := tpmSign(tpmutil.Handle(request.Index), request.Data)
 	if err != nil {
-		fmt.Printf(handleHTTPError(w, http.StatusInternalServerError, "failed to sign data: %v", err))
+		fmt.Println(handleHTTPError(w, http.StatusInternalServerError, "failed to sign data: %v", err))
 		return
 	}
 
@@ -193,7 +193,7 @@ func handleSigner(w http.ResponseWriter, r *http.Request) {
 	}
 	if sig.RSA != nil {
 		if sig.RSA.Signature == nil {
-			fmt.Printf(handleHTTPError(w, http.StatusInternalServerError, "failed to sign data, null rsa signature"))
+			fmt.Println(handleHTTPError(w, http.StatusInternalServerError, "failed to sign data, null rsa signature"))
 			return
 		}
 		response.RsaSignature = sig.RSA.Signature
@@ -201,7 +201,7 @@ func handleSigner(w http.ResponseWriter, r *http.Request) {
 	}
 	if sig.ECC != nil {
 		if sig.ECC.R == nil || sig.ECC.S == nil {
-			fmt.Printf(handleHTTPError(w, http.StatusInternalServerError, "failed to sign data, null ecc signature"))
+			fmt.Println(handleHTTPError(w, http.StatusInternalServerError, "failed to sign data, null ecc signature"))
 			return
 		}
 		response.EccSignatureR = sig.ECC.R.Bytes()
@@ -210,7 +210,7 @@ func handleSigner(w http.ResponseWriter, r *http.Request) {
 	}
 	out, err := proto.Marshal(&response)
 	if err != nil {
-		fmt.Printf(handleHTTPError(w, http.StatusInternalServerError, "failed to marshal response: %v", err))
+		fmt.Println(handleHTTPError(w, http.StatusInternalServerError, "failed to marshal response: %v", err))
 		return
 	}
 
@@ -228,18 +228,18 @@ func handleGetPub(w http.ResponseWriter, r *http.Request) {
 
 	var request vcom.TpmRequestGetPub
 	if err := proto.Unmarshal(payload, &request); err != nil {
-		fmt.Printf(handleHTTPError(w, http.StatusBadRequest, "failed to unmarshal request: %v", err))
+		fmt.Println(handleHTTPError(w, http.StatusBadRequest, "failed to unmarshal request: %v", err))
 		return
 	}
 	pub, err := tpmGetPub(tpmutil.Handle(request.Index))
 	if err != nil {
-		fmt.Printf(handleHTTPError(w, http.StatusInternalServerError, "failed to get public key: %v", err))
+		fmt.Println(handleHTTPError(w, http.StatusInternalServerError, "failed to get public key: %v", err))
 		return
 	}
 
 	pubBytes, err := pub.Encode()
 	if err != nil {
-		fmt.Printf(handleHTTPError(w, http.StatusInternalServerError, "failed to encode public key: %v", err))
+		fmt.Println(handleHTTPError(w, http.StatusInternalServerError, "failed to encode public key: %v", err))
 		return
 	}
 	response := vcom.TpmResponseGetPub{
@@ -249,7 +249,7 @@ func handleGetPub(w http.ResponseWriter, r *http.Request) {
 	}
 	out, err := proto.Marshal(&response)
 	if err != nil {
-		fmt.Printf(handleHTTPError(w, http.StatusInternalServerError, "failed to marshal response: %v", err))
+		fmt.Println(handleHTTPError(w, http.StatusInternalServerError, "failed to marshal response: %v", err))
 		return
 	}
 
@@ -267,18 +267,18 @@ func handleCertifyKey(w http.ResponseWriter, r *http.Request) {
 
 	var request vcom.TpmRequestCertify
 	if err := proto.Unmarshal(payload, &request); err != nil {
-		fmt.Printf(handleHTTPError(w, http.StatusBadRequest, "failed to unmarshal request: %v", err))
+		fmt.Println(handleHTTPError(w, http.StatusBadRequest, "failed to unmarshal request: %v", err))
 		return
 	}
 	pub, attestation, sig, err := tpmCertifyKeyWithAik(tpmutil.Handle(request.Index))
 	if err != nil {
-		fmt.Printf(handleHTTPError(w, http.StatusInternalServerError, "failed to get public key: %v", err))
+		fmt.Println(handleHTTPError(w, http.StatusInternalServerError, "failed to get public key: %v", err))
 		return
 	}
 
 	pubBytes, err := pub.Encode()
 	if err != nil {
-		fmt.Printf(handleHTTPError(w, http.StatusInternalServerError, "failed to encode public key: %v", err))
+		fmt.Println(handleHTTPError(w, http.StatusInternalServerError, "failed to encode public key: %v", err))
 		return
 	}
 	response := vcom.TpmResponseCertify{
@@ -288,7 +288,7 @@ func handleCertifyKey(w http.ResponseWriter, r *http.Request) {
 	}
 	out, err := proto.Marshal(&response)
 	if err != nil {
-		fmt.Printf(handleHTTPError(w, http.StatusInternalServerError, "failed to marshal response: %v", err))
+		fmt.Println(handleHTTPError(w, http.StatusInternalServerError, "failed to marshal response: %v", err))
 		return
 	}
 
