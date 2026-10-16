@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sigstore/sigstore-go/pkg/root"
 	"github.com/sigstore/sigstore-go/pkg/verify"
 )
 
@@ -118,7 +119,7 @@ func TestVerifyAssets(t *testing.T) {
 				f.Write([]byte{0})
 				f.Close()
 			}
-			v, err := newVerifier(trustedRootTD, tc.policy)
+			v, err := newVerifier(testRoot(t), tc.policy)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -167,7 +168,7 @@ func TestApproval(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			v, err := newVerifier(trustedRootTD, tc.policy)
+			v, err := newVerifier(testRoot(t), tc.policy)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -180,7 +181,7 @@ func TestApproval(t *testing.T) {
 	}
 
 	// The release-sign.yml signature on the same file is not an approval.
-	v, err := newVerifier(trustedRootTD, p)
+	v, err := newVerifier(testRoot(t), p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,20 +254,20 @@ func TestLayoutContent(t *testing.T) {
 	if got, err := l.target(""); err != nil || got != digest {
 		t.Fatalf("target: got %s, %v; want %s", got, err, digest)
 	}
-	if n, err := l.checkContent(digest); err != nil || n != 3 {
+	if n, err := l.checkContent(digest, true); err != nil || n != 3 {
 		t.Fatalf("checkContent: %d blobs, %v", n, err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "blobs", "sha256", sha256Hex([]byte("layer"))), []byte("LAYER"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := l.checkContent(digest); err == nil {
+	if _, err := l.checkContent(digest, true); err == nil {
 		t.Fatal("checkContent accepted a tampered layer")
 	}
 }
 
 func TestUnsignedImage(t *testing.T) {
 	dir, _ := writeLayout(t)
-	v, err := newVerifier(trustedRootTD, defaultPolicy("lf-edge/eve", defaultSignerRef))
+	v, err := newVerifier(testRoot(t), defaultPolicy("lf-edge/eve", defaultSignerRef))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,4 +275,13 @@ func TestUnsignedImage(t *testing.T) {
 	if err == nil || errors.Is(err, errUsage) || !strings.Contains(err.Error(), "no Sigstore bundle referrers") {
 		t.Fatalf("got %v, want a verification failure for missing signatures", err)
 	}
+}
+
+func testRoot(t *testing.T) *root.TrustedRoot {
+	t.Helper()
+	tr, err := root.NewTrustedRootFromPath(trustedRootTD)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tr
 }
