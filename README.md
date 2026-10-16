@@ -25,5 +25,7 @@ As a starting point, this codebase implements TPM related services:
 2) A customized version of libiothsm.so, to use with Azure IoT Edge Runtime, to use for TPM based DPS provisioning (azure-iot-edge-on-eve)
 3) "eve_run" shell command, which is used to issue a selective set of TPM commands on the host operating system (eve-tpm-tools/tools)
 
+It also provides eve-sigverify, which verifies the Sigstore signatures on EVE release images and assets (eve-sigverify)
+
 Please refer to INSTALL.md for installation instructions.
 Please open issues for any bugs or improvements. And Pull requests are welcome!
