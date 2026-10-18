@@ -142,16 +142,20 @@ func (l *layout) target(digest string) (string, error) {
 	return candidates[0], nil
 }
 
-// checkContent verifies that every blob the manifest or index at digest
-// references, recursively, is present and hashes to its descriptor.
-func (l *layout) checkContent(digest string) (int, error) {
+// checkContent verifies that the manifest or index at digest is present and
+// hashes to its digest and, with all, that every blob it references,
+// recursively, does too.
+func (l *layout) checkContent(digest string, all bool) (int, error) {
 	m, err := l.readManifest(digest)
 	if err != nil {
 		return 0, err
 	}
 	count := 1
+	if !all {
+		return count, nil
+	}
 	for _, d := range m.Manifests {
-		n, err := l.checkContent(d.Digest)
+		n, err := l.checkContent(d.Digest, true)
 		count += n
 		if err != nil {
 			return count, err

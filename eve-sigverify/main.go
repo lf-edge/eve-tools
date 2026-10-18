@@ -3,8 +3,9 @@
 
 // eve-sigverify checks the Sigstore keyless signatures EVE's release
 // workflow puts on an EVE image and on the release assets, and optionally a
-// maintainer's approval of the release, offline, against a
-// trusted_root.json. docs/SIGNING.md describes what is signed and by whom.
+// maintainer's approval of the release. Offline it reads an OCI layout or
+// downloaded assets and a trusted_root.json; online it fetches them, then
+// runs the same checks. docs/SIGNING.md describes what is signed and by whom.
 //
 // Exit status: 0 verified, 1 verification failed, 2 usage or input error.
 package main
@@ -14,13 +15,27 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
+
+	"github.com/sigstore/sigstore-go/pkg/root"
 )
 
 const usage = `usage:
-  eve-sigverify image  -trusted-root FILE [policy flags] [-digest sha256:...] OCI_LAYOUT_DIR
-  eve-sigverify assets -trusted-root FILE [policy flags] [-approval FILE] DIR SHA256SUMS
-  eve-sigverify trusted-root -o FILE     (online: fetch Sigstore's trusted root via TUF)
+  eve-sigverify image   [common flags] [-digest sha256:...] OCI_LAYOUT_DIR
+  eve-sigverify image   [common flags] [-platform OS/ARCH] [-content] REF
+  eve-sigverify assets  [common flags] [-approval FILE] DIR SHA256SUMS
+  eve-sigverify release [common flags] [-variant ARCH.HV.PLATFORM]... [-asset NAME]...
+                        [-allow-mutable] [-github-trusted-root FILE] TAG
+  eve-sigverify trusted-root -o FILE     (fetch Sigstore's trusted root via TUF)
+
+A REF or TAG is fetched (image from its registry, release from GitHub) into a
+temporary directory, or into -keep DIR, and then verified as offline.
+
+common flags:
+  -trusted-root FILE       Sigstore trusted_root.json (default: fetch via TUF)
+  -keep DIR                keep fetched inputs, including trusted roots, in DIR
 
 policy flags:
   -repo OWNER/NAME         GitHub repository that signed (default lf-edge/eve); sets
@@ -47,7 +62,7 @@ func main() {
 	}
 	var err error
 	switch os.Args[1] {
-	case "image", "assets":
+	case "image", "assets", "release":
 		err = runVerify(os.Args[1], os.Args[2:])
 	case "trusted-root":
 		err = runTrustedRoot(os.Args[2:])
@@ -65,9 +80,16 @@ func main() {
 	os.Exit(1)
 }
 
+// multiFlag collects a repeatable string flag.
+type multiFlag []string
+
+func (m *multiFlag) String() string     { return strings.Join(*m, ",") }
+func (m *multiFlag) Set(v string) error { *m = append(*m, v); return nil }
+
 func runVerify(kind string, args []string) error {
 	fs := flag.NewFlagSet(kind, flag.ContinueOnError)
-	trustedRoot := fs.String("trusted-root", "", "Sigstore trusted_root.json")
+	trustedRoot := fs.String("trusted-root", "", "Sigstore trusted_root.json (default: fetch via TUF)")
+	keep := fs.String("keep", "", "keep fetched inputs in this directory")
 	repo := fs.String("repo", "lf-edge/eve", "GitHub repository that signed")
 	ref := fs.String("signer-ref", defaultSignerRef, "ref of release-sign.yml in the identity")
 	tag := fs.String("tag", "", "required release tag")
@@ -78,12 +100,16 @@ func runVerify(kind string, args []string) error {
 	identityRegexp := fs.String("identity-regexp", "", "certificate identity regexp")
 	issuer := fs.String("issuer", githubIssuer, "OIDC issuer")
 	repository := fs.String("repository", "", "source repository URI (default https://github.com/<repo>)")
-	digest := fs.String("digest", "", "image digest to verify (image mode)")
+	digest := fs.String("digest", "", "image digest to verify (image mode, OCI layout)")
+	platform := fs.String("platform", "linux/"+runtime.GOARCH, "platform manifest to verify in an index (image mode, REF)")
+	content := fs.Bool("content", false, "also fetch and hash config and layers (image mode, REF)")
+	var variants, assets multiFlag
+	fs.Var(&variants, "variant", "sha256sums variant to verify, repeatable (release mode; default all)")
+	fs.Var(&assets, "asset", "further asset to download and check, repeatable (release mode)")
+	allowMutable := fs.Bool("allow-mutable", false, "accept a release that is not immutable (release mode)")
+	ghRoot := fs.String("github-trusted-root", "", "GitHub's trusted_root.json (release mode; default: fetch via TUF)")
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("%w: %v", errUsage, err)
-	}
-	if *trustedRoot == "" {
-		return fmt.Errorf("%w: -trusted-root is required", errUsage)
 	}
 	p := defaultPolicy(*repo, *ref)
 	p.issuer = *issuer
@@ -102,13 +128,62 @@ func runVerify(kind string, args []string) error {
 	if *identity != "" || *identityRegexp != "" {
 		p.identity, p.identityRegexp = *identity, *identityRegexp
 	}
-	v, err := newVerifier(*trustedRoot, p)
+
+	online := kind == "release"
+	if kind == "image" && fs.NArg() == 1 {
+		_, err := os.Stat(filepath.Join(fs.Arg(0), "index.json"))
+		online = err != nil
+	}
+	if online {
+		if fs.NArg() != 1 {
+			return fmt.Errorf("%w: %s takes one argument", errUsage, kind)
+		}
+		if kind == "release" {
+			if *tag != "" && *tag != fs.Arg(0) {
+				return fmt.Errorf("%w: -tag %s differs from the release %s", errUsage, *tag, fs.Arg(0))
+			}
+			p.ref = "refs/tags/" + fs.Arg(0)
+		}
+	}
+	dir := *keep
+	if online || dir != "" {
+		var err error
+		if dir == "" {
+			if dir, err = os.MkdirTemp("", "eve-sigverify-"); err != nil {
+				return err
+			}
+			defer os.RemoveAll(dir)
+		} else if err = os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("%w: %v", errUsage, err)
+		}
+	}
+	var tr *root.TrustedRoot
+	var err error
+	if *trustedRoot != "" {
+		tr, err = root.NewTrustedRootFromPath(*trustedRoot)
+	} else {
+		tr, err = sigstoreRoot("", *keep)
+	}
 	if err != nil {
 		return fmt.Errorf("%w: %v", errUsage, err)
 	}
-	if kind == "image" {
+	v, err := newVerifier(tr, p)
+	if err != nil {
+		return fmt.Errorf("%w: %v", errUsage, err)
+	}
+	switch {
+	case kind == "release":
+		return v.verifyReleaseOnline(fs.Arg(0), releaseOptions{
+			variants: variants, assets: assets, allowMutable: *allowMutable, githubRoot: *ghRoot,
+		}, dir)
+	case kind == "image" && online:
+		if *digest != "" {
+			return fmt.Errorf("%w: give the digest in REF (name@sha256:...), not -digest", errUsage)
+		}
+		return v.verifyImageOnline(fs.Arg(0), *platform, *content, filepath.Join(dir, "image"))
+	case kind == "image":
 		if fs.NArg() != 1 {
-			return fmt.Errorf("%w: image takes one OCI layout directory", errUsage)
+			return fmt.Errorf("%w: image takes one OCI layout directory or reference", errUsage)
 		}
 		return v.verifyImage(fs.Arg(0), *digest)
 	}
