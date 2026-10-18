@@ -45,11 +45,7 @@ type approvalPredicate struct {
 // newVerifier requires every signature to carry a transparency log entry and
 // a verified timestamp from the trusted root, which is what cosign's keyless
 // signing produces.
-func newVerifier(trustedRootPath string, p policy) (*verifier, error) {
-	tr, err := root.NewTrustedRootFromPath(trustedRootPath)
-	if err != nil {
-		return nil, fmt.Errorf("loading trusted root: %w", err)
-	}
+func newVerifier(tr *root.TrustedRoot, p policy) (*verifier, error) {
 	sv, err := verify.NewVerifier(tr, verify.WithTransparencyLog(1), verify.WithObserverTimestamps(1))
 	if err != nil {
 		return nil, err
@@ -98,20 +94,39 @@ func (v *verifier) verifyImage(dir, digest string) error {
 	if err != nil {
 		return fmt.Errorf("%w: %v", errUsage, err)
 	}
-	blobs, err := l.checkContent(target)
+	r, err := v.checkImage(l, target, true)
 	if err != nil {
-		return fmt.Errorf("image %s content: %v", target, err)
+		return err
+	}
+	fmt.Printf("OK: image %s (%d blobs) of release %s signed by %s%s\n", target, r.blobs, r.tag, r.signer, r.approved)
+	return nil
+}
+
+// imageResult is what checkImage verified about one manifest or index.
+type imageResult struct {
+	tag, signer, approved string
+	blobs                 int
+}
+
+// checkImage verifies the manifest or index target in l and its referrers.
+// With content, every blob it references must be present and match;
+// otherwise only target itself is hashed, which pins the rest by digest.
+func (v *verifier) checkImage(l *layout, target string, content bool) (imageResult, error) {
+	var res imageResult
+	blobs, err := l.checkContent(target, content)
+	if err != nil {
+		return res, fmt.Errorf("image %s content: %v", target, err)
 	}
 	bundles, err := l.bundlesFor(target)
 	if err != nil {
-		return err
+		return res, err
 	}
 	if len(bundles) == 0 {
-		return fmt.Errorf("image %s has no Sigstore bundle referrers in %s", target, dir)
+		return res, fmt.Errorf("image %s has no Sigstore bundle referrers in %s", target, l.dir)
 	}
 	digestBytes, err := hex.DecodeString(strings.TrimPrefix(target, "sha256:"))
 	if err != nil {
-		return err
+		return res, err
 	}
 	artifact := verify.WithArtifactDigest("sha256", digestBytes)
 	var signed *verify.VerificationResult
@@ -142,15 +157,14 @@ func (v *verifier) verifyImage(dir, digest string) error {
 		fmt.Fprintf(os.Stderr, "rejected bundle %s\n", f)
 	}
 	if signed == nil {
-		return fmt.Errorf("image %s: no cosign signature matching %s (%d bundles checked)",
+		return res, fmt.Errorf("image %s: no cosign signature matching %s (%d bundles checked)",
 			target, v.describePolicy(), len(bundles))
 	}
 	approved, err := v.approvedBy(approvals, tag)
 	if err != nil {
-		return fmt.Errorf("image %s: %v", target, err)
+		return res, fmt.Errorf("image %s: %v", target, err)
 	}
-	fmt.Printf("OK: image %s (%d blobs) of release %s signed by %s%s\n", target, blobs, tag, signer(signed), approved)
-	return nil
+	return imageResult{tag: tag, signer: signer(signed), approved: approved, blobs: blobs}, nil
 }
 
 // verifyRelease checks a bundle against the release policy and returns the
@@ -234,18 +248,31 @@ func (v *verifier) verifyBundle(data []byte, artifact verify.ArtifactPolicyOptio
 // When the policy names maintainers, approval is the bundle of a maintainer's
 // approval of the release, by default <tag>.maintainer.sigstore.json in dir.
 func (v *verifier) verifyAssets(dir, sums, approval string) error {
+	_, err := v.checkAssets(dir, sums, approval)
+	return err
+}
+
+// assetsResult is what checkAssets verified: the release tag and the commit
+// the signing run built, from the workflow certificate.
+type assetsResult struct {
+	tag, commit string
+}
+
+func (v *verifier) checkAssets(dir, sums, approval string) (assetsResult, error) {
+	var res assetsResult
 	sumsData, err := os.ReadFile(sums)
 	if err != nil {
-		return fmt.Errorf("%w: %v", errUsage, err)
+		return res, fmt.Errorf("%w: %v", errUsage, err)
 	}
 	bundleData, err := os.ReadFile(sums + ".sigstore.json")
 	if err != nil {
-		return fmt.Errorf("%w: %v", errUsage, err)
+		return res, fmt.Errorf("%w: %v", errUsage, err)
 	}
 	r, tag, err := v.verifyRelease(bundleData, verify.WithArtifact(strings.NewReader(string(sumsData))))
 	if err != nil {
-		return fmt.Errorf("%s: signature does not match %s: %v", filepath.Base(sums), v.describePolicy(), err)
+		return res, fmt.Errorf("%s: signature does not match %s: %v", filepath.Base(sums), v.describePolicy(), err)
 	}
+	res = assetsResult{tag: tag, commit: r.Signature.Certificate.SourceRepositoryDigest}
 	approved := ""
 	if len(v.maintainers) > 0 {
 		if approval == "" {
@@ -253,19 +280,19 @@ func (v *verifier) verifyAssets(dir, sums, approval string) error {
 		}
 		data, err := os.ReadFile(approval)
 		if err != nil {
-			return fmt.Errorf("%w: %v", errUsage, err)
+			return res, fmt.Errorf("%w: %v", errUsage, err)
 		}
 		a, err := v.verifyApproval(data, verify.WithArtifact(strings.NewReader(string(sumsData))))
 		if err != nil {
-			return fmt.Errorf("%s: approval %s: %v", filepath.Base(sums), filepath.Base(approval), err)
+			return res, fmt.Errorf("%s: approval %s: %v", filepath.Base(sums), filepath.Base(approval), err)
 		}
 		if approved, err = v.approvedBy([]*verify.VerificationResult{a}, tag); err != nil {
-			return fmt.Errorf("%s: %v", filepath.Base(sums), err)
+			return res, fmt.Errorf("%s: %v", filepath.Base(sums), err)
 		}
 	}
 	want, err := parseSums(sumsData)
 	if err != nil {
-		return fmt.Errorf("%s: %v", filepath.Base(sums), err)
+		return res, fmt.Errorf("%s: %v", filepath.Base(sums), err)
 	}
 	var checked, missing int
 	for _, name := range sortedKeys(want) {
@@ -275,20 +302,20 @@ func (v *verifier) verifyAssets(dir, sums, approval string) error {
 			continue
 		}
 		if err != nil {
-			return err
+			return res, err
 		}
 		if got != want[name] {
-			return fmt.Errorf("%s: sha256 %s, signed sums say %s", name, got, want[name])
+			return res, fmt.Errorf("%s: sha256 %s, signed sums say %s", name, got, want[name])
 		}
 		checked++
 	}
 	if checked == 0 {
-		return fmt.Errorf("%w: signature OK but none of the %d assets listed in %s is in %s",
+		return res, fmt.Errorf("%w: signature OK but none of the %d assets listed in %s is in %s",
 			errUsage, len(want), filepath.Base(sums), dir)
 	}
 	fmt.Printf("OK: %s of release %s signed by %s%s; %d assets match, %d listed but not present\n",
 		filepath.Base(sums), tag, signer(r), approved, checked, missing)
-	return nil
+	return res, nil
 }
 
 // parseSums reads sha256sum(1) output. Names must be plain file names: the

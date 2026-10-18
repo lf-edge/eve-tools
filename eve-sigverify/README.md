@@ -1,10 +1,12 @@
 # eve-sigverify
 
-Verifies, offline, the Sigstore keyless signatures that EVE's release
-workflow puts on an EVE image and on the release assets, and optionally a
-maintainer's approval of the release, as described in EVE's
+Verifies the Sigstore keyless signatures that EVE's release workflow puts on
+an EVE image and on the release assets, and optionally a maintainer's
+approval of the release, as described in EVE's
 [docs/SIGNING.md](https://github.com/lf-edge/eve/blob/master/docs/SIGNING.md).
-It runs on the machine where the image or assets were downloaded.
+Given a downloaded OCI layout or assets, it verifies offline. Given an image
+reference or a release tag, it fetches the inputs first and then runs the
+same checks.
 
 Build it with Go 1.25 or later:
 
@@ -16,8 +18,11 @@ Each run prints one `OK:` or `FAIL:` verdict line. Exit status is 0 when
 verified, 1 when verification fails, and 2 on a usage or input error.
 
 ```text
-eve-sigverify image  -trusted-root FILE [policy flags] [-digest sha256:...] OCI_LAYOUT_DIR
-eve-sigverify assets -trusted-root FILE [policy flags] [-approval FILE] DIR SHA256SUMS
+eve-sigverify image   [common flags] [-digest sha256:...] OCI_LAYOUT_DIR
+eve-sigverify image   [common flags] [-platform OS/ARCH] [-content] REF
+eve-sigverify assets  [common flags] [-approval FILE] DIR SHA256SUMS
+eve-sigverify release [common flags] [-variant ARCH.HV.PLATFORM]... [-asset NAME]...
+                      [-allow-mutable] [-github-trusted-root FILE] TAG
 eve-sigverify trusted-root -o FILE
 ```
 
@@ -29,8 +34,11 @@ for an `lf-edge/eve` release.
 ## Trusted root
 
 Verification needs Sigstore's public-good `trusted_root.json` (Fulcio CA,
-Rekor and CT log keys, timestamp authorities). `trusted-root` is the only
-mode that goes online; it fetches the file through Sigstore's TUF repository:
+Rekor and CT log keys, timestamp authorities). `-trusted-root FILE` names a
+local copy. Without it, every mode fetches the file through Sigstore's TUF
+repository, keeping TUF metadata under the user cache directory
+(`eve-sigverify/tuf`), so expired metadata and a rolled-back root are
+refused. `trusted-root` saves a copy for offline use:
 
 ```console
 $ eve-sigverify trusted-root -o trusted_root.json
@@ -61,6 +69,45 @@ A maintainer approval is an in-toto statement of type
 `https://github.com/<repo>/release-approval/v1` whose subjects are every image
 and sums file of a release and whose predicate names the repository and
 release; it must name the tag that the workflow signature names.
+
+## Online
+
+`image REF` and `release TAG` download into a temporary directory, or into
+`-keep DIR`, which then holds an OCI layout (`DIR/image`) or the release
+assets, plus the trusted roots used, for a later offline re-check.
+
+```console
+$ eve-sigverify image -repo eriknordmark/eve -signer-ref refs/heads/sign-master -tag 9.9.0-rc9 -maintainer erik@zededa.com \
+    docker.io/eriknordmark/eve-signtest@sha256:feb39ffaa5216a79d1a808ebea974383772de7f4e73a207fde1a635e41039d42
+OK: image sha256:feb39ffaa5216a79d1a808ebea974383772de7f4e73a207fde1a635e41039d42 (docker.io/eriknordmark/eve-signtest@sha256:feb39ffaa5216a79d1a808ebea974383772de7f4e73a207fde1a635e41039d42) of release 9.9.0-rc9 signed by https://github.com/eriknordmark/eve/.github/workflows/release-sign.yml@refs/heads/sign-master at 2026-09-30T19:55:38Z (Tlog), approved by erik@zededa.com at 2026-09-30T22:35:47Z (Tlog)
+```
+
+- `image REF` fetches the manifest and its Sigstore bundle referrers through
+  the OCI referrers API. For an index, both the index and its `-platform`
+  manifest (default: the host's) must be signed for the same release. The
+  signature covers the manifest digest, which pins every layer; `-content`
+  also downloads and hashes the config and layers. The verdict names the
+  verified digest; deploy by that digest, not by tag. Registry credentials
+  are read from the Docker config when present.
+- `release TAG` reads the release from the GitHub API, downloads every
+  `*.sha256sums` (or those `-variant` names), their bundles, each variant's
+  `images.txt`, any `-asset`, and with `-maintainer` the approval bundle, and
+  verifies each sums file as `assets` does. `GH_TOKEN`, when set, is sent to
+  `api.github.com` only.
+- A release must be a GitHub immutable release. Its release attestation,
+  signed by GitHub (`https://dotcom.releases.github.com`) under GitHub's own
+  trusted root (fetched from `https://tuf-repo.github.com`, anchored on the
+  root the GitHub CLI embeds, or `-github-trusted-root FILE`), must name the
+  repository and tag, put the tag at the commit the signing run built, and
+  list every downloaded asset with its sha256. `-allow-mutable` accepts a
+  release that is not immutable and says so in the verdict:
+
+```console
+$ eve-sigverify release -repo eriknordmark/eve -signer-ref refs/heads/sign-master 0.0.1-rc13
+OK: amd64.kvm.generic.sha256sums of release 0.0.1-rc13 signed by https://github.com/eriknordmark/eve/.github/workflows/release-sign.yml@refs/heads/sign-master at 2026-10-09T17:39:33Z (Tlog); 1 assets match, 7 listed but not present
+OK: arm64.kvm.generic.sha256sums of release 0.0.1-rc13 signed by https://github.com/eriknordmark/eve/.github/workflows/release-sign.yml@refs/heads/sign-master at 2026-10-09T17:39:36Z (Tlog); 1 assets match, 7 listed but not present
+FAIL: release 0.0.1-rc13 is not immutable; -allow-mutable accepts it
+```
 
 ## Image
 
