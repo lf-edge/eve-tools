@@ -6,7 +6,7 @@ toolchain go1.25.11
 
 require (
 	github.com/google/go-containerregistry v0.21.6
-	github.com/klauspost/compress v1.18.6
+	github.com/klauspost/compress v1.18.7
 	github.com/sigstore/sigstore-go v1.2.1
 )
 
