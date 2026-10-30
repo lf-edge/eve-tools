@@ -20,6 +20,10 @@ import (
 // maxBundleSize caps a fetched Sigstore bundle; release bundles are a few KiB.
 const maxBundleSize = 4 << 20
 
+// maxReferrerSize caps a bundle referring to an image. An SBOM attestation
+// carries the whole SPDX document, 13 MB for EVE 17.12.0.
+const maxReferrerSize = 256 << 20
+
 // layoutWriter writes fetched manifests and blobs into an OCI image layout,
 // for the offline checks to read back.
 type layoutWriter struct {
@@ -215,7 +219,10 @@ func fetchReferrers(repo name.Repository, subject v1.Hash, w *layoutWriter, opts
 			if string(layer.MediaType) != bundleMediaType {
 				continue
 			}
-			if err := fetchBlob(repo, layer.Digest, maxBundleSize, w, opts); err != nil {
+			if layer.Size > maxReferrerSize {
+				return fmt.Errorf("referrer %s: bundle %s is %d bytes, over %d", d.Digest, layer.Digest, layer.Size, maxReferrerSize)
+			}
+			if err := fetchBlob(repo, layer.Digest, layer.Size, w, opts); err != nil {
 				return err
 			}
 		}
