@@ -152,6 +152,9 @@ func (v *verifier) verifyReleaseOnline(tag string, o releaseOptions, dir string)
 	if len(v.maintainers) > 0 {
 		want = append(want, tag+".maintainer.sigstore.json")
 	}
+	if byName[tag+".tagger.sigstore.json"].Name != "" {
+		want = append(want, tag+".tagger.sigstore.json")
+	}
 	files := map[string]string{}
 	for _, n := range want {
 		a, ok := byName[n]
@@ -167,16 +170,23 @@ func (v *verifier) verifyReleaseOnline(tag string, o releaseOptions, dir string)
 		}
 		files[n] = sum
 	}
-	var commit string
+	var first assetsResult
 	for _, s := range sums {
 		r, err := v.checkAssets(dir, filepath.Join(dir, s), "")
 		if err != nil {
 			return err
 		}
-		if commit != "" && r.commit != commit {
-			return fmt.Errorf("%s was signed for commit %s, another sums file for %s", s, r.commit, commit)
+		if first.commit == "" {
+			first = r
 		}
-		commit = r.commit
+		if r.commit != first.commit || r.runURI != first.runURI {
+			return fmt.Errorf("%s was signed for commit %s in %s, another sums file for %s in %s",
+				s, r.commit, r.runURI, first.commit, first.runURI)
+		}
+	}
+	commit := first.commit
+	if err := v.reportApprovers(dir, tag, first, sums); err != nil {
+		return fmt.Errorf("release %s: %v", tag, err)
 	}
 	if !rel.Immutable {
 		if !o.allowMutable {

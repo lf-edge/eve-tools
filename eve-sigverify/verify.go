@@ -252,10 +252,10 @@ func (v *verifier) verifyAssets(dir, sums, approval string) error {
 	return err
 }
 
-// assetsResult is what checkAssets verified: the release tag and the commit
-// the signing run built, from the workflow certificate.
+// assetsResult is what checkAssets verified: the release tag, the commit
+// the signing run built and the run, from the workflow certificate.
 type assetsResult struct {
-	tag, commit string
+	tag, commit, runURI string
 }
 
 func (v *verifier) checkAssets(dir, sums, approval string) (assetsResult, error) {
@@ -272,7 +272,8 @@ func (v *verifier) checkAssets(dir, sums, approval string) (assetsResult, error)
 	if err != nil {
 		return res, fmt.Errorf("%s: signature does not match %s: %v", filepath.Base(sums), v.describePolicy(), err)
 	}
-	res = assetsResult{tag: tag, commit: r.Signature.Certificate.SourceRepositoryDigest}
+	res = assetsResult{tag: tag, commit: r.Signature.Certificate.SourceRepositoryDigest,
+		runURI: r.Signature.Certificate.RunInvocationURI}
 	approved := ""
 	if len(v.maintainers) > 0 {
 		if approval == "" {
