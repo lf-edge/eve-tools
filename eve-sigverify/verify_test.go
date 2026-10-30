@@ -16,11 +16,14 @@ import (
 	"github.com/sigstore/sigstore-go/pkg/verify"
 )
 
-// The testdata amd64.kvm.generic.* files are assets of eriknordmark/eve
-// 0.0.1-rc10, and signtest.* with its maintainer approval those of 9.9.0-rc9,
-// all signed by that fork's release-sign.yml on its sign-master branch.
+// The testdata amd64.kvm.generic.* files are assets of lf-edge/eve 17.12.0.
+// lf-edge/eve releases carry no maintainer approval, so signtest.* with its
+// approval are those of release 9.9.0-rc9 of a fork, signed by the fork's
+// release-sign.yml on its sign-master branch.
 const (
 	sumsName      = "amd64.kvm.generic.sha256sums"
+	releaseRepo   = "lf-edge/eve"
+	releaseTag    = "17.12.0"
 	forkRepo      = "eriknordmark/eve"
 	forkSigner    = "refs/heads/sign-master"
 	signedAsset   = "amd64.kvm.generic.images.txt"
@@ -70,20 +73,20 @@ func TestVerifyAssets(t *testing.T) {
 	h := want[signedAsset]
 	tamperedSums := []byte(strings.Replace(string(sums), h, strings.Repeat("0", 8)+h[8:], 1))
 
-	fork := defaultPolicy(forkRepo, forkSigner)
-	tagged := fork
-	tagged.ref = "refs/tags/0.0.1-rc10"
-	otherTag := fork
-	otherTag.ref = "refs/tags/0.0.1-rc9"
-	otherRepo := fork
-	otherRepo.repository = "https://github.com/lf-edge/eve"
-	otherEnv := fork
+	release := defaultPolicy(releaseRepo, defaultSignerRef)
+	tagged := release
+	tagged.ref = "refs/tags/" + releaseTag
+	otherTag := release
+	otherTag.ref = "refs/tags/17.11.0"
+	otherRepo := release
+	otherRepo.repository = "https://github.com/example/eve"
+	otherEnv := release
 	otherEnv.environment = "packages"
-	anyEnv := fork
+	anyEnv := release
 	anyEnv.environment = ""
-	oldWorkflow := fork
-	oldWorkflow.identity = "https://github.com/eriknordmark/eve/.github/workflows/assets.yml@refs/tags/0.0.1-rc10"
-	unapproved := fork
+	tagWorkflow := release
+	tagWorkflow.identity = "https://github.com/lf-edge/eve/.github/workflows/publish.yml@refs/tags/" + releaseTag
+	unapproved := release
 	unapproved.maintainers = []string{maintainer}
 
 	tests := []struct {
@@ -94,19 +97,19 @@ func TestVerifyAssets(t *testing.T) {
 		tamper  bool
 		wantErr string
 	}{
-		{name: "fork release policy", policy: fork, files: []string{signedAsset}},
+		{name: "release policy", policy: release, files: []string{signedAsset}},
 		{name: "exact tag", policy: tagged, files: []string{signedAsset}},
 		{name: "any environment", policy: anyEnv, files: []string{signedAsset}},
-		{name: "upstream policy", policy: defaultPolicy("lf-edge/eve", defaultSignerRef), files: []string{signedAsset}, wantErr: "expected SAN value"},
-		{name: "signer on another branch", policy: defaultPolicy(forkRepo, "refs/heads/master"), files: []string{signedAsset}, wantErr: "expected SAN value"},
+		{name: "fork policy", policy: defaultPolicy("example/eve", defaultSignerRef), files: []string{signedAsset}, wantErr: "expected SAN value"},
+		{name: "signer on another branch", policy: defaultPolicy(releaseRepo, "refs/heads/other"), files: []string{signedAsset}, wantErr: "expected SAN value"},
 		{name: "other tag", policy: otherTag, files: []string{signedAsset}, wantErr: "expected SourceRepositoryRef"},
 		{name: "other repository", policy: otherRepo, files: []string{signedAsset}, wantErr: "expected SourceRepositoryURI"},
 		{name: "other environment", policy: otherEnv, files: []string{signedAsset}, wantErr: `deployment environment "release"`},
-		{name: "build workflow identity", policy: oldWorkflow, files: []string{signedAsset}, wantErr: "expected SAN value"},
-		{name: "approval missing", policy: unapproved, files: []string{signedAsset}, wantErr: "0.0.1-rc10.maintainer.sigstore.json"},
-		{name: "tampered sums", policy: fork, sums: tamperedSums, files: []string{signedAsset}, wantErr: "failed to verify signature"},
-		{name: "tampered asset", policy: fork, files: []string{signedAsset}, tamper: true, wantErr: "signed sums say"},
-		{name: "no listed asset present", policy: fork, wantErr: "none of the 8 assets"},
+		{name: "tag workflow identity", policy: tagWorkflow, files: []string{signedAsset}, wantErr: "expected SAN value"},
+		{name: "approval missing", policy: unapproved, files: []string{signedAsset}, wantErr: releaseTag + ".maintainer.sigstore.json"},
+		{name: "tampered sums", policy: release, sums: tamperedSums, files: []string{signedAsset}, wantErr: "failed to verify signature"},
+		{name: "tampered asset", policy: release, files: []string{signedAsset}, tamper: true, wantErr: "signed sums say"},
+		{name: "no listed asset present", policy: release, wantErr: "none of the 8 assets"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -73,10 +73,10 @@ func noPeel(sha string) (string, error) {
 }
 
 // TestReleaseAttestationAnnotatedTag checks GitHub's attestation of
-// eriknordmark/eve 0.0.1-rc15, whose annotated tag the attestation names by
+// lf-edge/eve 17.12.0, whose annotated tag the attestation names by
 // the tag object rather than the commit.
 func TestReleaseAttestationAnnotatedTag(t *testing.T) {
-	data, err := os.ReadFile("testdata/eve-0.0.1-rc15.release-attestation.sigstore.json")
+	data, err := os.ReadFile("testdata/eve-17.12.0.release-attestation.sigstore.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,14 +89,14 @@ func TestReleaseAttestationAnnotatedTag(t *testing.T) {
 		t.Fatal(err)
 	}
 	const (
-		repo      = "eriknordmark/eve"
-		tag       = "0.0.1-rc15"
-		tagObject = "0b8f0daef714984416909d61278c9b319a20270e"
-		commit    = "14b9c73dbacf247e51eee31350285233af4ff2e2"
+		repo      = "lf-edge/eve"
+		tag       = "17.12.0"
+		tagObject = "f12a3cfc8247dd8ca2c87b0b80848d8e35b5e20f"
+		commit    = "ed75ebb94fd7c65e6cbe3fb5d883c062b1956b7f"
 	)
 	files := map[string]string{
-		"amd64.kvm.generic.sha256sums": "b0b32bab27750820ae179f0e07e8a2a9bf558110dfc1b42e3125644b731eb1fc",
-		"arm64.kvm.generic.sha256sums": "3c1a31cfaef356cab4e5a775d8116ac700a6698a98993a2f8e7e00ed49d10cc1",
+		"amd64.kvm.generic.sha256sums": "a9d5f325f8a3881bd9a1c736e0014d428268b569f19365f6a5f9a360c5d35a58",
+		"arm64.kvm.generic.sha256sums": "629314fc14850f6374bb0e3c3ba3bf82202dbfd8c06e15c464d3c1f405d0cb1f",
 	}
 	peelTo := func(c string) func(string) (string, error) {
 		return func(sha string) (string, error) {

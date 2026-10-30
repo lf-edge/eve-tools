@@ -26,10 +26,8 @@ eve-sigverify release [common flags] [-variant ARCH.HV.PLATFORM]... [-asset NAME
 eve-sigverify trusted-root -o FILE
 ```
 
-The examples below verify releases of the `eriknordmark/eve` fork, whose
-signing workflow runs from its `sign-master` branch, hence
-`-repo eriknordmark/eve -signer-ref refs/heads/sign-master`. Drop both flags
-for an `lf-edge/eve` release.
+The examples below verify EVE 17.12.0. For a fork's release, name the fork
+with `-repo` and the branch its signing workflow runs from with `-signer-ref`.
 
 ## Trusted root
 
@@ -74,12 +72,13 @@ release; it must name the tag that the workflow signature names.
 
 `image REF` and `release TAG` download into a temporary directory, or into
 `-keep DIR`, which then holds an OCI layout (`DIR/image`) or the release
-assets, plus the trusted roots used, for a later offline re-check.
+assets, plus the trusted roots used, for a later offline re-check; an image
+re-check needs `-content`, since it hashes every blob.
 
 ```console
-$ eve-sigverify image -repo eriknordmark/eve -signer-ref refs/heads/sign-master -tag 9.9.0-rc9 -maintainer erik@zededa.com \
-    docker.io/eriknordmark/eve-signtest@sha256:feb39ffaa5216a79d1a808ebea974383772de7f4e73a207fde1a635e41039d42
-OK: image sha256:feb39ffaa5216a79d1a808ebea974383772de7f4e73a207fde1a635e41039d42 (docker.io/eriknordmark/eve-signtest@sha256:feb39ffaa5216a79d1a808ebea974383772de7f4e73a207fde1a635e41039d42) of release 9.9.0-rc9 signed by https://github.com/eriknordmark/eve/.github/workflows/release-sign.yml@refs/heads/sign-master at 2026-09-30T19:55:38Z (Tlog), approved by erik@zededa.com at 2026-09-30T22:35:47Z (Tlog)
+$ eve-sigverify image -tag 17.12.0 docker.io/lfedge/eve:17.12.0-kvm-amd64
+info: verified https://spdx.dev/Document attestation by https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master at 2026-10-30T18:50:12Z (Tlog)
+OK: image sha256:76e5b795105f44b1dd8ae452c8b5d5c8ad0d3bb2e79ff19f458144394d1a9a8b (docker.io/lfedge/eve:17.12.0-kvm-amd64) of release 17.12.0 signed by https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master at 2026-10-30T18:43:12Z (Tlog)
 ```
 
 - `image REF` fetches the manifest and its Sigstore bundle referrers through
@@ -103,11 +102,14 @@ OK: image sha256:feb39ffaa5216a79d1a808ebea974383772de7f4e73a207fde1a635e41039d4
   release that is not immutable and says so in the verdict:
 
 ```console
-$ eve-sigverify release -repo eriknordmark/eve -signer-ref refs/heads/sign-master 0.0.1-rc13
-OK: amd64.kvm.generic.sha256sums of release 0.0.1-rc13 signed by https://github.com/eriknordmark/eve/.github/workflows/release-sign.yml@refs/heads/sign-master at 2026-10-09T17:39:33Z (Tlog); 1 assets match, 7 listed but not present
-OK: arm64.kvm.generic.sha256sums of release 0.0.1-rc13 signed by https://github.com/eriknordmark/eve/.github/workflows/release-sign.yml@refs/heads/sign-master at 2026-10-09T17:39:36Z (Tlog); 1 assets match, 7 listed but not present
-FAIL: release 0.0.1-rc13 is not immutable; -allow-mutable accepts it
+$ eve-sigverify release -variant amd64.kvm.generic 17.12.0
+OK: amd64.kvm.generic.sha256sums of release 17.12.0 signed by https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master at 2026-10-30T18:52:01Z (Tlog); 1 assets match, 7 listed but not present
+OK: release 17.12.0 is immutable: GitHub attests tag 17.12.0 at commit ed75ebb94fd7c65e6cbe3fb5d883c062b1956b7f with these 3 assets
 ```
+
+The asset that matches is `images.txt`; name others with `-asset`, e.g.
+`-asset amd64.kvm.generic.installer.raw.zst`, to download and check them too.
+Flags go before the tag.
 
 ## Image
 
@@ -117,11 +119,10 @@ maintainer approval is attached. `oras` copies them; `cosign save` does not
 include referrers.
 
 ```console
-$ oras copy --recursive --to-oci-layout \
-    docker.io/eriknordmark/eve-signtest@sha256:feb39ffaa5216a79d1a808ebea974383772de7f4e73a207fde1a635e41039d42 ./layout
-$ eve-sigverify image -trusted-root trusted_root.json -repo eriknordmark/eve -signer-ref refs/heads/sign-master \
-    -tag 9.9.0-rc9 -maintainer erik@zededa.com ./layout
-OK: image sha256:feb39ffaa5216a79d1a808ebea974383772de7f4e73a207fde1a635e41039d42 (3 blobs) of release 9.9.0-rc9 signed by https://github.com/eriknordmark/eve/.github/workflows/release-sign.yml@refs/heads/sign-master at 2026-09-30T19:55:38Z (Tlog), approved by erik@zededa.com at 2026-09-30T22:35:47Z (Tlog)
+$ oras copy --recursive --to-oci-layout docker.io/lfedge/eve:17.12.0-kvm-amd64 ./layout
+$ eve-sigverify image -trusted-root trusted_root.json -tag 17.12.0 ./layout
+info: verified https://spdx.dev/Document attestation by https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master at 2026-10-30T18:50:12Z (Tlog)
+OK: image sha256:76e5b795105f44b1dd8ae452c8b5d5c8ad0d3bb2e79ff19f458144394d1a9a8b (11 blobs) of release 17.12.0 signed by https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master at 2026-10-30T18:43:12Z (Tlog)
 ```
 
 Every blob of the image is hashed against its manifest, and at least one
@@ -129,14 +130,30 @@ referrer must be a `cosign sign` signature over the manifest digest matching
 the policy; an SBOM attestation alone does not count. Use `-digest` when the
 layout holds more than one image.
 
-The same image without an approval by the named maintainer fails:
+An image without an approval by the named maintainer fails:
 
 ```console
-$ eve-sigverify image -trusted-root trusted_root.json -repo eriknordmark/eve -signer-ref refs/heads/sign-master \
-    -maintainer nordmark@sonic.net ./layout
-rejected bundle sha256:d05c2cac…: failed to verify certificate identity: no matching CertificateIdentity found, last error: expected SAN value "https://github.com/eriknordmark/eve/.github/workflows/release-sign.yml@refs/heads/sign-master", got "erik@zededa.com"
-FAIL: image sha256:feb39ffaa5216a79d1a808ebea974383772de7f4e73a207fde1a635e41039d42: no approval of release 9.9.0-rc9 by nordmark@sonic.net
+$ eve-sigverify image -trusted-root trusted_root.json -maintainer someone@example.com ./layout
+info: verified https://spdx.dev/Document attestation by https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master at 2026-10-30T18:50:12Z (Tlog)
+FAIL: image sha256:76e5b795105f44b1dd8ae452c8b5d5c8ad0d3bb2e79ff19f458144394d1a9a8b: no approval of release 17.12.0 by someone@example.com
 ```
+
+### An image pulled with docker
+
+`docker pull` keeps no signatures, but the image is stored under the digest
+the registry served. Verify that digest, then run the image by it:
+
+```sh
+d=$(docker image inspect --format '{{index .RepoDigests 0}}' lfedge/eve:17.12.0-kvm-amd64)
+eve-sigverify image -tag 17.12.0 "docker.io/$d"
+docker run --rm "$d" installer_raw > installer.raw
+```
+
+What `docker run` writes is as trustworthy as the image it ran. `rootfs` and
+`sbom` produce the same bytes as the release's `rootfs.img` and
+`rootfs.spdx.json`, so they can also be checked against the signed sums;
+`installer_raw`, `installer_iso` and `live` create file systems with random
+volume IDs and differ on every run.
 
 ## Release assets
 
@@ -148,9 +165,10 @@ Listed assets that were not downloaded are counted, not failed. With
 `DIR/<tag>.maintainer.sigstore.json`) must list the sums file as a subject.
 
 ```console
-$ eve-sigverify assets -trusted-root trusted_root.json -repo eriknordmark/eve -signer-ref refs/heads/sign-master \
-    rc10 rc10/amd64.kvm.generic.sha256sums
-OK: amd64.kvm.generic.sha256sums of release 0.0.1-rc10 signed by https://github.com/eriknordmark/eve/.github/workflows/release-sign.yml@refs/heads/sign-master at 2026-10-01T06:48:30Z (Tlog); 2 assets match, 6 listed but not present
+$ gh release download 17.12.0 -R lf-edge/eve -D 17.12.0 -p 'amd64.kvm.generic.sha256sums*' \
+    -p amd64.kvm.generic.images.txt -p amd64.kvm.generic.rootfs.spdx.json
+$ eve-sigverify assets -trusted-root trusted_root.json 17.12.0 17.12.0/amd64.kvm.generic.sha256sums
+OK: amd64.kvm.generic.sha256sums of release 17.12.0 signed by https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master at 2026-10-30T18:52:01Z (Tlog); 2 assets match, 6 listed but not present
 ```
 
 The `images.txt` asset names the `eve` and `eve-sources` image digests the
@@ -158,10 +176,8 @@ assets were extracted from, so the sums signature also binds those images.
 A changed asset fails, and so does a signature for another tag:
 
 ```console
-$ eve-sigverify assets -trusted-root trusted_root.json -repo eriknordmark/eve -signer-ref refs/heads/sign-master \
-    tampered tampered/amd64.kvm.generic.sha256sums
-FAIL: amd64.kvm.generic.images.txt: sha256 3b2951ca4d87b1c05cd570ca697d5f61106af5a0e2f76ca3813699d44d4d9f4c, signed sums say d0d25e5e8214a902ce9fe2d0d2b8e24e642b2d03dd6c07e9f1e3bfec91b0bb69
-$ eve-sigverify assets -trusted-root trusted_root.json -repo eriknordmark/eve -signer-ref refs/heads/sign-master \
-    -tag 0.0.1-rc9 rc10 rc10/amd64.kvm.generic.sha256sums
-FAIL: amd64.kvm.generic.sha256sums: signature does not match identity https://github.com/eriknordmark/eve/.github/workflows/release-sign.yml@refs/heads/sign-master, repository https://github.com/eriknordmark/eve, ref refs/tags/0.0.1-rc9: failed to verify certificate identity: no matching CertificateIdentity found, last error: expected SourceRepositoryRef to be "refs/tags/0.0.1-rc9", got "refs/tags/0.0.1-rc10"
+$ eve-sigverify assets -trusted-root trusted_root.json tampered tampered/amd64.kvm.generic.sha256sums
+FAIL: amd64.kvm.generic.images.txt: sha256 cdeb4e4b2dd2a71434a7b04d8b549aa41226efc55eefe38dc04ab37b59fba277, signed sums say ed4b6eca7ba651063062b2c03671ff3dbe28803f973d7c5561c0d554816138a2
+$ eve-sigverify assets -trusted-root trusted_root.json -tag 17.11.0 17.12.0 17.12.0/amd64.kvm.generic.sha256sums
+FAIL: amd64.kvm.generic.sha256sums: signature does not match identity https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master, repository https://github.com/lf-edge/eve, ref refs/tags/17.11.0: failed to verify certificate identity: no matching CertificateIdentity found, last error: expected SourceRepositoryRef to be "refs/tags/17.11.0", got "refs/tags/17.12.0"
 ```
