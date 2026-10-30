@@ -43,6 +43,7 @@ type policy struct {
 	environment    string // required Deployment Environment; empty means any
 	maintainers    []string
 	approvalType   string
+	taggerType     string
 }
 
 // defaultPolicy returns the policy for releases of the GitHub repository
@@ -56,6 +57,7 @@ func defaultPolicy(repo, signerRef string) policy {
 		repository:   "https://github.com/" + repo,
 		environment:  releaseEnv,
 		approvalType: fmt.Sprintf("https://github.com/%s/release-approval/v1", repo),
+		taggerType:   fmt.Sprintf("https://github.com/%s/release-tagger/v1", repo),
 	}
 }
 

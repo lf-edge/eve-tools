@@ -104,12 +104,26 @@ OK: image sha256:76e5b795105f44b1dd8ae452c8b5d5c8ad0d3bb2e79ff19f458144394d1a9a8
 ```console
 $ eve-sigverify release -variant amd64.kvm.generic 17.12.0
 OK: amd64.kvm.generic.sha256sums of release 17.12.0 signed by https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master at 2026-10-30T18:52:01Z (Tlog); 1 assets match, 7 listed but not present
+warning: release 17.12.0 has no 17.12.0.tagger.sigstore.json; who pushed the tag is not recorded
+info: release environment approved by christoph-zededa (GitHub user ID 121871801), recorded only by GitHub in https://github.com/lf-edge/eve/actions/runs/41071947071/attempts/1
+warning: no maintainer approval checked; -maintainer requires 17.12.0.maintainer.sigstore.json
 OK: release 17.12.0 is immutable: GitHub attests tag 17.12.0 at commit ed75ebb94fd7c65e6cbe3fb5d883c062b1956b7f with these 3 assets
 ```
 
 The asset that matches is `images.txt`; name others with `-asset`, e.g.
 `-asset amd64.kvm.generic.installer.raw.zst`, to download and check them too.
 Flags go before the tag.
+
+`release` also reports who pushed the tag and who approved its signing:
+
+- The tagger comes from `<tag>.tagger.sigstore.json`, an in-toto statement of
+  type `https://github.com/<repo>/release-tagger/v1` that `release-sign.yml`
+  signs over every sums file, naming the tag, commit and the pusher's GitHub
+  login and user ID. It is in Rekor. An invalid statement fails; a missing one
+  is a warning.
+- The approvers of the signing run's deployment environment come from GitHub's
+  run approvals API. GitHub keeps them only with the run, so a deleted run
+  loses them. None found is a warning, and so is a tagger who also approved.
 
 ## Image
 
