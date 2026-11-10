@@ -1,0 +1,3 @@
+# CVE Watch workflow outputs when invoked from the repository root.
+/out/
+/.venv/
