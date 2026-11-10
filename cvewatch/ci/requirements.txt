@@ -1,0 +1,4 @@
+requests>=2.32,<3
+diskcache>=5.6,<6
+packaging>=24,<27
+univers>=30,<33
