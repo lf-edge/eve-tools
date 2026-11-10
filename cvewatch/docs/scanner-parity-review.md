@@ -32,7 +32,8 @@ rate limits/timeouts, cache expiry and migration, a synchronized concurrent
 coverage-report write, failed archive refresh, kernel interval boundaries,
 fixed/backported Alpine revisions, workflow input injection, and alias-aware
 comparison. Builds remain arbitrary source execution within their isolated
-runner. Their SBOM contents and ignore policy still require source review.
+runner. Their SBOM contents still require source review. Exception policy comes
+independently from the approved base branch.
 
 Bash syntax checks and `git diff --check` pass. Actionlint 1.7.12 does not yet
 recognize GitHub.com's documented `job.workflow_repository`/`job.workflow_sha`
@@ -85,3 +86,26 @@ path-resolution check. Bash syntax and workflow lint pass with the documented
 context-property exclusions above. The scanner logic matches the real-image
 validation recorded above; that expensive live-feed simulation was not repeated
 for this path-only migration.
+
+## Approved exception policy
+
+The workflow resolves the target base branch tip once before either build runs.
+Both the baseline build and the independently fetched exception policy use that
+full commit SHA. The scan job reads `.cve-ignore` from Git objects without
+checking out or executing base source code. It never uses ignore files supplied
+by build artifacts. Local trusted-source scans follow the same base-policy
+selection rule.
+
+Exceptions must be proposed and merged into the base branch separately before
+rerunning a feature PR. There is no file-change-only enforcement for exception
+PRs. A missing file is an empty policy; fetch failures, symlinks, oversized files,
+and invalid UTF-8 fail the policy step. Policy and commit provenance accompany
+the scan report.
+
+All 80 local regressions pass. New tests use real temporary Git repositories to
+check branch-tip selection, pinning across branch advances, missing files, stale
+policy removal on failure, invalid policies, and the baseline build's pinned
+revision. An orchestration regression confirms a PR cannot bypass the comparison
+using its own or the baseline build's ignore artifact; only a subsequently merged
+base-branch exception changes the gate outcome. SBOM fabrication remains a
+separate trust limitation.

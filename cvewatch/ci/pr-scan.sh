@@ -117,13 +117,6 @@ clone_and_build_eve() {
     echo "$commit_info" > "$TEMP_DIR/pr-commit-info"
     log_info "PR Commit: $commit_info"
 
-    # Save the CVE ignore file from the PR revision, if present. The repo
-    # tree may be re-checked out to master later, so keep a copy.
-    if [ -f ".cve-ignore" ]; then
-        cp ".cve-ignore" "$TEMP_DIR/cve-ignore"
-        log_info "Found .cve-ignore in the EVE repo"
-    fi
-
     if ! build_current_eve "$TEMP_DIR/pr-sbom.json" "$TEMP_DIR/pr-alpine-version"; then
         log_error "Failed to build PR version"
         popd > /dev/null
@@ -140,8 +133,16 @@ get_master_info() {
     local base_sha
     # Pin the upstream branch once, before selecting an image or metadata.
     # Use a separate worktree so PR build products cannot contaminate baseline.
-    log_cmd git -C "$EVE_REPO_DIR" fetch "$BASE_URL" "refs/heads/$BASE_REF" || return 1
+    if [ -n "${BASE_SHA:-}" ] && [[ ! "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+        log_error "Invalid pinned base commit"
+        return 1
+    fi
+    log_cmd git -C "$EVE_REPO_DIR" fetch "$BASE_URL" "${BASE_SHA:-refs/heads/$BASE_REF}" || return 1
     base_sha=$(git -C "$EVE_REPO_DIR" rev-parse FETCH_HEAD) || return 1
+    if [ -n "${BASE_SHA:-}" ] && [ "$base_sha" != "$BASE_SHA" ]; then
+        log_error "Baseline fetch did not match the pinned commit"
+        return 1
+    fi
     log_cmd git -C "$EVE_REPO_DIR" worktree add --detach "$base_tree" "$base_sha" || return 1
     git -C "$base_tree" log -1 --format='%h %s' > "$TEMP_DIR/master-commit-info"
     log_info "Baseline: $BASE_URL $BASE_REF ($base_sha)"
@@ -210,12 +211,9 @@ run_scans() {
 
 run_compare() {
     log_info "Comparing results..."
-    if [ -f "$TEMP_DIR/cve-ignore" ]; then
-        log_info "Applying CVE ignore list from the EVE repo (.cve-ignore)"
-        log_cmd "$BASE_DIR/compare.sh" "$TEMP_DIR/scan_results_master.json" "$TEMP_DIR/scan_results_pr.json" "$REPORT_FILE" "$TEMP_DIR/cve-ignore"
-    else
-        log_cmd "$BASE_DIR/compare.sh" "$TEMP_DIR/scan_results_master.json" "$TEMP_DIR/scan_results_pr.json" "$REPORT_FILE"
-    fi
+    [[ -f "$TEMP_DIR/base-cve-ignore" && ! -L "$TEMP_DIR/base-cve-ignore" ]] || return 2
+    log_info "Applying approved CVE ignore list from the pinned base branch"
+    log_cmd "$BASE_DIR/compare.sh" "$TEMP_DIR/scan_results_master.json" "$TEMP_DIR/scan_results_pr.json" "$REPORT_FILE" "$TEMP_DIR/base-cve-ignore"
 }
 
 # Main execution
@@ -227,6 +225,10 @@ LOG_FILE="$LOG_DIR/pr-scan.log"
 export LOG_FILE
 
 setup_environment
+
+# Read policy before running any PR build commands. Local builds are for trusted input.
+python3 "$BASE_DIR/base_policy.py" "$BASE_URL" "$BASE_REF" "$TEMP_DIR/base-cve-ignore"
+BASE_SHA=$(cat "$TEMP_DIR/base-cve-ignore.commit")
 
 log_info "Running PR scan..."
 download_cvss_db "$CACHE_SOURCE_DIR"

@@ -33,12 +33,23 @@ against a stable branch is compared with that branch rather than with master.
 
 ### Ignoring vulnerabilities
 
-The PR gate reads a `.cve-ignore` file from the root of the scanned EVE
-repository (at the PR revision). IDs listed there are excluded from the
-report and do not fail CI. One vulnerability ID per line (`CVE-...`,
-`GHSA-...`, ...), `#` starts a comment, blank lines are skipped. Matching
-is case-insensitive and also covers a vulnerability's aliases, so a CVE ID
-matches the corresponding GHSA entry and vice versa.
+The PR gate reads `.cve-ignore` from the **tip of the target base branch**,
+pinned when the run resolves its inputs. The baseline SBOM uses that same commit.
+The trusted scan job retrieves the policy directly from Git without running
+source code; ignore files supplied by PR or baseline build artifacts are ignored.
+
+Submit exception changes in a **separate PR**, get them reviewed and merged into
+the base branch, then rerun the affected PR's scan. An exception added in the PR
+being scanned cannot suppress that PR's findings. The scanner does not enforce
+that exception PRs contain only policy edits; reviewers enforce that workflow.
+
+A base commit with no `.cve-ignore` means no exceptions. A failed policy fetch or
+invalid policy file fails the scan instead of silently changing the policy.
+The report artifact includes the applied policy and its base commit SHA.
+
+Use one vulnerability ID per line (`CVE-...`, `GHSA-...`, ...). `#` starts a
+comment; blank lines are skipped. Matching is case-insensitive and includes
+advisory aliases, so a CVE ID matches the corresponding GHSA entry and vice versa.
 
 ```
 # false positive, code path not built into EVE
@@ -107,8 +118,9 @@ or the scanner used by the gate. GitHub.com is required for the documented
 [`job.workflow_sha`/`job.workflow_repository` contexts](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#job-context).
 
 This is still a source-controlled build: malicious PR code can fabricate its
-own SBOM or change `.cve-ignore`. Review those changes and protect workflow/build
-configuration through your normal code-review rules. The local `pr-scan.sh`
+own SBOM. The approved exception policy comes independently from the pinned
+base branch. Protect workflow/build configuration and review policy changes
+through your normal code-review rules. The local `pr-scan.sh`
 helper runs repository build commands on your machine; use the isolated CI
 workflow for untrusted forks. No production secrets are needed for PR scans.
 

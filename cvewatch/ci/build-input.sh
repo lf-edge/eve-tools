@@ -27,6 +27,3 @@ fi
 cp "$TEMP_DIR/$prefix-sbom.json" "$DEST/sbom.json"
 cp "$TEMP_DIR/$prefix-sbom-kernel-version" "$DEST/kernel-version"
 cp "$TEMP_DIR/$prefix-commit-info" "$DEST/commit-info"
-if [ "$ROLE" = pr ] && [ -f "$TEMP_DIR/cve-ignore" ]; then
-    cp "$TEMP_DIR/cve-ignore" "$DEST/cve-ignore"
-fi

@@ -71,6 +71,13 @@ class InputTests(unittest.TestCase):
         scan_commands='\n'.join(step.get('run','') for step in scan['steps'])
         self.assertNotIn('build-input',scan_commands)
         self.assertIn('scan-inputs.sh',scan_commands)
+        self.assertIn('base_policy.py', scan_commands)
+        policy = next(step for step in scan['steps'] if step.get('name') == 'Fetch approved base exception policy')
+        self.assertEqual(policy['env']['BASE_SHA'], '${{ needs.resolve.outputs.base_sha }}')
+        build = next(step for step in workflow['jobs']['build']['steps'] if step.get('name') == 'Build SBOM')
+        self.assertEqual(build['env']['BASE_SHA'], policy['env']['BASE_SHA'])
+        self.assertIn('out/policy/cve-ignore', scan_commands)
+
 
 
     def test_relocated_workflows_resolve_tools_from_repository_root(self):
