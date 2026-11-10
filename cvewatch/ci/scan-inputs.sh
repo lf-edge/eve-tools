@@ -4,6 +4,8 @@ set -euo pipefail
 CI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PR_DIR="${1:?PR artifacts required}"
 BASE_INPUT_DIR="${2:?baseline artifacts required}"
+BASE_POLICY="${3:?approved base ignore policy required}"
+[[ -f "$BASE_POLICY" && ! -L "$BASE_POLICY" ]] || { echo "Missing approved base policy" >&2; exit 2; }
 source "$CI_DIR/common.sh"
 setup_common_env
 trap 'cleanup_files "$TEMP_DIR" "$ALPINE_CACHE"' EXIT
@@ -18,8 +20,6 @@ for role in pr base; do
     # File contents are only data. No artifact-derived paths or commands run.
     run_cve_scanner "$role" "$dir/sbom.json" unused "$SCAN_DIR" "$CACHE_SOURCE_DIR/cvss-bt.csv" "$kernel"
 done
-args=("$SCAN_DIR/scan_results_base.json" "$SCAN_DIR/scan_results_pr.json" out/scan_report.txt)
-if [ -f "$PR_DIR/cve-ignore" ]; then
-    args+=("$PR_DIR/cve-ignore")
-fi
+# Ignore files supplied by either build artifact are deliberately not consulted.
+args=("$SCAN_DIR/scan_results_base.json" "$SCAN_DIR/scan_results_pr.json" out/scan_report.txt "$BASE_POLICY")
 bash "$CI_DIR/compare.sh" "${args[@]}"

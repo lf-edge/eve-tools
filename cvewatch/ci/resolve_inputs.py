@@ -12,6 +12,8 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from base_policy import pin_base
+
 
 class InputError(ValueError):
     pass
@@ -71,6 +73,7 @@ def main():
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
     names = {"repo": "INPUT_REPO", "revision": "INPUT_REVISION", "base_repo": "INPUT_BASE_REPO", "base_ref": "INPUT_BASE_REF"}
     result = resolve(event, {k: os.environ.get(v, "") for k, v in names.items()}, os.environ.get("GITHUB_REPOSITORY", ""))
+    result["base_sha"] = pin_base(result["base_repo"], result["base_ref"])
     with open(os.environ["GITHUB_OUTPUT"], "a") as out:
         for key, value in result.items():
             out.write(f"{key}={value}\n")
