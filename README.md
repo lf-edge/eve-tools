@@ -29,3 +29,6 @@ It also provides eve-sigverify, which verifies the Sigstore signatures on EVE re
 
 Please refer to INSTALL.md for installation instructions.
 Please open issues for any bugs or improvements. And Pull requests are welcome!
+
+[CVE Watch](cvewatch/README.md) scans EVE SBOMs and provides an isolated reusable
+GitHub Actions workflow for comparing PR vulnerabilities with their base branch.
