@@ -25,7 +25,8 @@ if [[ "$EVE_TAG" =~ ^master-([0-9a-f]{8,40})$ ]]; then
 else
     image="lfedge/eve:$EVE_TAG"
 fi
-# A cache entry is valid only for the same immutable image identity.
+# Cache keys identify the requested tag, not an immutable registry digest.
+# Republishing a tag requires clearing its cached SBOM and .image marker.
 if [ -s "$SBOM_PATH" ] && [ -f "$SBOM_PATH.image" ] &&
    [ "$(cat "$SBOM_PATH.image")" = "$image" ] &&
    jq -e '.packages | type == "array" and length > 0' "$SBOM_PATH" >/dev/null 2>&1; then

@@ -151,6 +151,9 @@ get_master_info() {
        log_cmd bash "$BASE_DIR/eve/get_sbom.sh" "master-${base_sha:0:8}" "$master_sbom_path"; then
         read_source_metadata "$master_version_path" "$TEMP_DIR/master-sbom-kernel-version" || return 1
     else
+        if [ "$BASE_URL" = "https://github.com/lf-edge/eve.git" ] && [ "$BASE_REF" = master ]; then
+            log_warn "Published master SBOM unavailable or invalid for $base_sha; falling back to a full source build. This can be slow while its image is being published."
+        fi
         log_info "Building the pinned baseline from source"
         build_current_eve "$master_sbom_path" "$master_version_path" || return 1
     fi

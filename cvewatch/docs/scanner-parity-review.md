@@ -97,7 +97,7 @@ by build artifacts. Local trusted-source scans follow the same base-policy
 selection rule.
 
 Exceptions must be proposed and merged into the base branch separately before
-rerunning a feature PR. There is no file-change-only enforcement for exception
+selecting **Re-run all jobs** for a feature PR (not only failed jobs). There is no file-change-only enforcement for exception
 PRs. A missing file is an empty policy; fetch failures, symlinks, oversized files,
 and invalid UTF-8 fail the policy step. Policy and commit provenance accompany
 the scan report.
@@ -109,3 +109,19 @@ revision. An orchestration regression confirms a PR cannot bypass the comparison
 using its own or the baseline build's ignore artifact; only a subsequently merged
 base-branch exception changes the gate outcome. SBOM fabrication remains a
 separate trust limitation.
+
+## Follow-up review validation (2026-11-16)
+
+83 regressions pass, including execution of the pre-checkout guards with empty
+and malformed workflow identity, partial-rerun rejection, and the baseline
+branch allowlist. Shell syntax and `git diff --check` pass. Actionlint 1.7.12
+passes with the same two documented context-property exclusions above.
+No scanner matching behavior or exception file format was changed.
+
+The review's package-scoped exceptions and enforced expiry are deferred format
+changes; the current global-ID/alias semantics and human review-date convention
+are now explicit. Copyright headers match existing `eve-sigverify` files.
+`MAINTAINERS.md` deliberately delegates ownership to the main EVE repository;
+no unapproved subsystem owners were added. Caller-trigger freshness and
+retargeting between allowed branches still require the dependent EVE caller
+update before activation; an allowlist alone does not solve stale green checks.
