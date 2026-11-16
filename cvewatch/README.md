@@ -16,6 +16,14 @@ name: CVE PR Gate
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+concurrency:
+  group: cve-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   cve-scan:
@@ -39,8 +47,8 @@ The trusted scan job retrieves the policy directly from Git without running
 source code; ignore files supplied by PR or baseline build artifacts are ignored.
 
 Submit exception changes in a **separate PR**, get them reviewed and merged into
-the base branch, then choose **Re-run all jobs** for the affected PR's scan. An exception added in the PR
-being scanned cannot suppress that PR's findings. The scanner does not enforce
+the base branch, then choose **Re-run all jobs** for the affected PR's scan. An
+exception added in the PR being scanned cannot suppress that PR's findings. The scanner does not enforce
 that exception PRs contain only policy edits; reviewers enforce that workflow.
 
 Re-running only failed jobs is rejected: the old successful `resolve` job pins
@@ -54,8 +62,9 @@ the whole affected scope before approval. Use an inline `#` comment to record
 the reason, owner and review date. Comments do not enforce expiry; package
 scoping and automatic expiry are not supported.
 
-A base commit with no `.cve-ignore` means no exceptions. A failed policy fetch or
-invalid policy file fails the scan instead of silently changing the policy.
+A base commit with no `.cve-ignore` means no exceptions. Failed policy fetches,
+symlinks, oversized files, and invalid UTF-8 fail the policy step instead of
+silently changing the policy.
 The report artifact includes the applied policy and its base commit SHA.
 
 Use one vulnerability ID per line (`CVE-...`, `GHSA-...`, ...). `#` starts a
@@ -116,9 +125,8 @@ sudo crontab -e
 
 The reusable workflow resolves both sides of a PR automatically, including the
 associated PR for a `workflow_run` event. Explicit inputs override event values.
-A run whose PR head has changed, or which has no unambiguous associated PR,
-fails instead of guessing a revision. Existing callers must update their pinned
-workflow reference to receive these changes.
+For `workflow_run`, a changed PR head or ambiguous associated PR fails input
+resolution instead of guessing a revision.
 
 PR and baseline SBOMs are built in separate disposable GitHub-hosted jobs. A
 third job checks out the scanner at the reusable workflow's own commit and scans
@@ -135,7 +143,7 @@ through your normal code-review rules. The local `pr-scan.sh`
 helper runs repository build commands on your machine; use the isolated CI
 workflow for untrusted forks. No production secrets are needed for PR scans.
 
-Scanner behavior shared with CVEWatch:
+Scanner behavior:
 
 - Normalize Go standard-library/toolchain versions for OSV while preserving the
   actual binary version in the output. Development/unknown Go versions do not
@@ -159,7 +167,7 @@ and supplemental fallback uncertainty remain explicit coverage limitations,
 not proof that a package is safe. Supplemental coverage reports are written to
 `out/cache/osv/fallback-reports/` and included in the CI artifact.
 
-The original scanner CLI is retained:
+Scanner CLI:
 
 ```bash
 python ci/scan/scanner.py LABEL sbom.json cvss-bt.csv unused out/scans \
@@ -169,8 +177,8 @@ python ci/scan/scanner.py LABEL sbom.json cvss-bt.csv unused out/scans \
 `LABEL` names the output; it is never treated as a Git revision. Supply the
 kernel from the exact source revision when the SBOM omits it. PR, daily, and
 historical wrappers do this automatically. The old Alpine DB positional
-argument remains accepted for compatibility; flat secfixes are no longer used
-to suppress results. Daily and historical scans retain failed uploads for
+argument is accepted for compatibility but does not suppress results using
+flat secfixes. Daily and historical scans retain failed uploads for
 retry, delete only successfully uploaded result files, and exit nonzero on
 failures. Concurrent runs of the same wrapper/output directory are rejected;
 parallel tag workers share expiring query caches safely.
@@ -185,7 +193,10 @@ for script in ci/*.sh ci/eve/*.sh ci/alpine/*.sh; do bash -n "$script"; done
 
 CI runs these tests on Python 3.10 and 3.13. Tests use local Git repositories and
 mock public API/build/image responses; they do not build EVE, probe production,
-or send CVEWatch uploads.
+or send CVEWatch uploads. Coverage includes workflow identity and rerun guards,
+baseline pinning, policy retrieval failures, malformed/paginated API responses,
+cache expiry and concurrent writes, kernel interval boundaries, distro
+backports, alias-aware comparison, and build/upload failure handling.
 
 ### Baseline and caller requirements
 
@@ -193,11 +204,10 @@ The reusable gate accepts `master` and numeric `X.Y-stable` base branches only.
 This reduces accidental baselines; it does not prevent retargeting between valid
 branches. The caller must run on new commits and base-branch changes (`opened`,
 `synchronize`, `reopened`, `edited` PR activities), not only review submission,
-and require a fresh successful check for the intended target branch. Caller draft
-lf-edge/eve#7073 includes those events and cancels older checks; its upstream
-pin and explicit base inputs must be enabled before activation. A caller that always targets
-one branch can explicitly set `eve-base-ref`; do not pin master for legitimate
-stable-branch PRs. Review-triggered checks alone can leave a stale green result.
+and require a fresh successful check for the intended target branch. Cancel
+superseded runs using a concurrency group keyed by PR number. A caller that
+always targets one branch can explicitly set `eve-base-ref`; do not pin master
+for legitimate stable-branch PRs. Review-triggered checks alone can leave a stale green result.
 
 The PR input is built from source with `make ... pkgs sbom`; the master baseline
 prefers the published image's `sbom` output, falling back to a source build at the
@@ -207,6 +217,10 @@ validates the other. The published image describes the shipped artifact; the
 source build describes the proposed build. Generator differences can cause
 noise or missed differences. Investigate discrepancies against the actual build
 artifacts; a passing differential gate is not proof of complete coverage.
+
+SBOM cache markers identify image tags, not immutable registry digests. If a tag
+is republished, remove its cached SBOM and `.image` marker before rescanning.
+Historical scans preserve the commit associated with their cached SBOM.
 
 Disposable hosted build runners still have sudo and an artifact runtime token.
 A malicious build can attempt to upload a colliding baseline artifact name.
