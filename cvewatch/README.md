@@ -193,8 +193,9 @@ The reusable gate accepts `master` and numeric `X.Y-stable` base branches only.
 This reduces accidental baselines; it does not prevent retargeting between valid
 branches. The caller must run on new commits and base-branch changes (`opened`,
 `synchronize`, `reopened`, `edited` PR activities), not only review submission,
-and require a fresh successful check for the intended target branch. Caller PR
-lf-edge/eve#7073 must handle that before activation. A caller that always targets
+and require a fresh successful check for the intended target branch. Caller draft
+lf-edge/eve#7073 includes those events and cancels older checks; its upstream
+pin and explicit base inputs must be enabled before activation. A caller that always targets
 one branch can explicitly set `eve-base-ref`; do not pin master for legitimate
 stable-branch PRs. Review-triggered checks alone can leave a stale green result.
 

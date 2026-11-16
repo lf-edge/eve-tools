@@ -122,6 +122,7 @@ The review's package-scoped exceptions and enforced expiry are deferred format
 changes; the current global-ID/alias semantics and human review-date convention
 are now explicit. Copyright headers match existing `eve-sigverify` files.
 `MAINTAINERS.md` deliberately delegates ownership to the main EVE repository;
-no unapproved subsystem owners were added. Caller-trigger freshness and
-retargeting between allowed branches still require the dependent EVE caller
-update before activation; an allowlist alone does not solve stale green checks.
+no unapproved subsystem owners were added. The dependent EVE draft (#7073) now triggers on new commits and PR edits, and
+cancels older checks for that PR. Its upstream workflow pin and explicit base
+inputs remain pending merge of this PR. An allowlist alone does not solve stale
+green checks.
