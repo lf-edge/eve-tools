@@ -41,6 +41,35 @@ class InputTests(unittest.TestCase):
             event['workflow_run']['pull_requests']=associations
             with self.assertRaises(inputs.InputError):inputs.resolve(event,{},'lf-edge/eve')
 
+    def test_base_branch_allowlist(self):
+        for ref in ('master', '17.0-stable', '13.4-stable'):
+            self.assertEqual(inputs.resolve({'pull_request':pr()},{'base_ref':ref},'lf-edge/eve')['base_ref'],ref)
+        for ref in ('feature', '17.0.1-lts', 'foo-stable', 'refs/heads/master', '17.0-stable/other'):
+            with self.subTest(ref=ref), self.assertRaises(inputs.InputError):
+                inputs.resolve({'pull_request':pr()},{'base_ref':ref},'lf-edge/eve')
+
+    def test_checkout_identity_guard_runs_before_every_checkout(self):
+        workflow=yaml.safe_load((ROOT/'.github/workflows/cve-scan.yml').read_text())
+        for job in workflow['jobs'].values():
+            for i, step in enumerate(job['steps']):
+                if not step.get('uses','').startswith('actions/checkout@'):
+                    continue
+                guard=job['steps'][i-1]
+                self.assertEqual(guard['name'],'Require trusted workflow identity')
+                for repo,sha,ok in [('lf-edge/eve-tools','a'*40,True),('','a'*40,False),('lf-edge/eve-tools','',False),('bad/repo/path','a'*40,False),('lf-edge/eve-tools','master',False)]:
+                    result=subprocess.run(['bash','-c',guard['run']],env={**os.environ,'WORKFLOW_REPOSITORY':repo,'WORKFLOW_SHA':sha},capture_output=True)
+                    self.assertEqual(result.returncode==0,ok,(repo,sha))
+
+    def test_partial_rerun_is_rejected_before_artifact_download(self):
+        workflow=yaml.safe_load((ROOT/'.github/workflows/cve-scan.yml').read_text())
+        steps=workflow['jobs']['pr-scan']['steps']
+        idx=next(i for i,s in enumerate(steps) if s.get('name')=='Require inputs from this run attempt')
+        self.assertLess(idx,next(i for i,s in enumerate(steps) if s.get('uses','').startswith('actions/download-artifact@')))
+        for resolved,attempt,expected in [('1','1',0),('1','2',1),('','2',1),('2','2',0)]:
+            result=subprocess.run(['bash','-c',steps[idx]['run']],env={**os.environ,'RESOLVED_ATTEMPT':resolved,'GITHUB_RUN_ATTEMPT':attempt},text=True,capture_output=True)
+            self.assertEqual(result.returncode,expected)
+            if expected:self.assertIn('Re-run all jobs',result.stdout)
+
     def test_explicit_inputs_and_no_empty_repo(self):
         values=inputs.resolve({}, {'repo':'https://github.com/lf-edge/eve.git','revision':'tag'},'lf-edge/eve')
         self.assertEqual(values['base_ref'],'master')

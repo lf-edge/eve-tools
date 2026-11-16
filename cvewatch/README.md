@@ -39,9 +39,20 @@ The trusted scan job retrieves the policy directly from Git without running
 source code; ignore files supplied by PR or baseline build artifacts are ignored.
 
 Submit exception changes in a **separate PR**, get them reviewed and merged into
-the base branch, then rerun the affected PR's scan. An exception added in the PR
+the base branch, then choose **Re-run all jobs** for the affected PR's scan. An exception added in the PR
 being scanned cannot suppress that PR's findings. The scanner does not enforce
 that exception PRs contain only policy edits; reviewers enforce that workflow.
+
+Re-running only failed jobs is rejected: the old successful `resolve` job pins
+an old baseline and the build artifacts belong to an earlier attempt. A full
+rerun resolves the updated base tip and rebuilds both inputs.
+
+Exceptions match a vulnerability ID and all its aliases **globally**, across
+packages and versions. For example, approving a CVE for one package also hides
+that CVE in another package; a GHSA entry suppresses its aliased CVE too. Review
+the whole affected scope before approval. Use an inline `#` comment to record
+the reason, owner and review date. Comments do not enforce expiry; package
+scoping and automatic expiry are not supported.
 
 A base commit with no `.cve-ignore` means no exceptions. A failed policy fetch or
 invalid policy file fails the scan instead of silently changing the policy.
@@ -175,3 +186,30 @@ for script in ci/*.sh ci/eve/*.sh ci/alpine/*.sh; do bash -n "$script"; done
 CI runs these tests on Python 3.10 and 3.13. Tests use local Git repositories and
 mock public API/build/image responses; they do not build EVE, probe production,
 or send CVEWatch uploads.
+
+### Baseline and caller requirements
+
+The reusable gate accepts `master` and numeric `X.Y-stable` base branches only.
+This reduces accidental baselines; it does not prevent retargeting between valid
+branches. The caller must run on new commits and base-branch changes (`opened`,
+`synchronize`, `reopened`, `edited` PR activities), not only review submission,
+and require a fresh successful check for the intended target branch. Caller PR
+lf-edge/eve#7073 must handle that before activation. A caller that always targets
+one branch can explicitly set `eve-base-ref`; do not pin master for legitimate
+stable-branch PRs. Review-triggered checks alone can leave a stale green result.
+
+The PR input is built from source with `make ... pkgs sbom`; the master baseline
+prefers the published image's `sbom` output, falling back to a source build at the
+same commit if extraction fails or publication has not finished. The comparator
+uses those supplied SBOMs as its inventory: neither generator overrides or
+validates the other. The published image describes the shipped artifact; the
+source build describes the proposed build. Generator differences can cause
+noise or missed differences. Investigate discrepancies against the actual build
+artifacts; a passing differential gate is not proof of complete coverage.
+
+Disposable hosted build runners still have sudo and an artifact runtime token.
+A malicious build can attempt to upload a colliding baseline artifact name.
+The real baseline upload then fails and the gate fails closed; this can deny
+service, not create a successful trusted scan. Never reuse such runners or add
+secrets to their jobs. Defining-workflow identity is validated before checkout
+so missing context cannot fall back to caller-controlled scanner code.

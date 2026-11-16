@@ -66,6 +66,8 @@ def resolve(event, inputs, repository, get_pr=fetch_pr):
             raise InputError(f"{key} must be an HTTPS GitHub repository URL")
         if not re.fullmatch(r"/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\.git)?", url.path):
             raise InputError(f"Invalid repository path in {key}")
+    if not re.fullmatch(r"(?:master|[0-9]+\.[0-9]+-stable)", values["base_ref"]):
+        raise InputError("Base branch must be master or a numeric X.Y-stable branch")
     return values
 
 
