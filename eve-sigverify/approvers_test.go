@@ -4,10 +4,14 @@
 package main
 
 import (
+	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
+
+	"github.com/sigstore/sigstore-go/pkg/verify"
 )
 
 // testdata/9.9.0-rc13.* are the tagger statement and the sums file it covers
@@ -60,6 +64,77 @@ func TestTagger(t *testing.T) {
 			if err == nil && (u.Login != taggerLogin || u.ID != taggerID) {
 				t.Fatalf("tagger %v, want %s %d", u, taggerLogin, taggerID)
 			}
+		})
+	}
+}
+
+// taggerImage is one of the image digests the 9.9.0-rc13 tagger statement
+// lists as a subject.
+const taggerImage = "028cc8dbb869c10cdd9a4a9aa97f54ab670a177c4b0845fb70d0fbff5052f904"
+
+func digestOption(t *testing.T, hexDigest string) verify.ArtifactPolicyOption {
+	t.Helper()
+	d, err := hex.DecodeString(hexDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return verify.WithArtifactDigest("sha256", d)
+}
+
+// TestTaggerForImage checks that a tagger statement is bound to an image by
+// the image's digest.
+func TestTaggerForImage(t *testing.T) {
+	bundle, err := os.ReadFile("testdata/9.9.0-rc13.tagger.sigstore.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := newVerifier(testRoot(t), defaultPolicy(forkRepo, forkSigner))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name    string
+		digest  string
+		commit  string
+		wantErr string
+	}{
+		{name: "image digest", digest: taggerImage, commit: taggerCommit},
+		{name: "other image", digest: taggerImage[:62] + "00", commit: taggerCommit, wantErr: "artifact"},
+		{name: "other commit", digest: taggerImage, commit: strings.Repeat("0", 40), wantErr: "names 9.9.0-rc13 at"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			u, err := v.checkTaggerFor(bundle, []verify.ArtifactPolicyOption{digestOption(t, tc.digest)}, taggerTag, tc.commit)
+			checkErr(t, err, tc.wantErr)
+			if err == nil && (u.Login != taggerLogin || u.ID != taggerID) {
+				t.Fatalf("tagger %v, want %s %d", u, taggerLogin, taggerID)
+			}
+		})
+	}
+}
+
+func TestReportApproval(t *testing.T) {
+	signers := parseSigners([]byte("alice alice@example.com\nbob bob@example.com\nbobby BOB@example.com\n"), "list")
+	tests := []struct {
+		name    string
+		signers releaseSigners
+		tagger  githubUser
+		email   string
+		wantErr string
+	}{
+		{name: "other account", signers: signers, tagger: githubUser{Login: "carol", ID: 3}, email: "alice@example.com"},
+		{name: "tagger approved", signers: signers, tagger: githubUser{Login: "alice", ID: 1}, email: "alice@example.com", wantErr: "alice both pushed tag"},
+		{name: "login case differs", signers: signers, tagger: githubUser{Login: "ALICE", ID: 1}, email: "alice@example.com", wantErr: "both pushed tag"},
+		{name: "email case differs", signers: signers, tagger: githubUser{Login: "bobby", ID: 2}, email: "Bob@Example.com", wantErr: "bobby both pushed tag"},
+		{name: "tagger not recorded", signers: signers, email: "alice@example.com"},
+		{name: "email not listed", signers: signers, tagger: githubUser{Login: "alice", ID: 1}, email: "dave@example.com"},
+		{name: "no signers list", tagger: githubUser{Login: "alice", ID: 1}, email: "alice@example.com"},
+		{name: "no approval", signers: signers, tagger: githubUser{Login: "alice", ID: 1}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			v := &verifier{signers: tc.signers}
+			checkErr(t, v.reportApproval("1.0.0", tc.tagger, tc.email), tc.wantErr)
 		})
 	}
 }

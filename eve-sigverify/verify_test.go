@@ -176,10 +176,14 @@ func TestApproval(t *testing.T) {
 				t.Fatal(err)
 			}
 			a, err := v.verifyApproval(approval, verify.WithArtifact(bytes.NewReader(tc.artifact)))
+			var got maintainerApproval
 			if err == nil {
-				_, err = v.approvedBy([]*verify.VerificationResult{a}, tc.tag)
+				got, err = v.approvedBy([]*verify.VerificationResult{a}, tc.tag)
 			}
 			checkErr(t, err, tc.wantErr)
+			if err == nil && got.email != maintainer {
+				t.Fatalf("approver %q, want %q", got.email, maintainer)
+			}
 		})
 	}
 

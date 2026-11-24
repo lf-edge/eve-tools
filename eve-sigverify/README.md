@@ -73,11 +73,13 @@ release; it must name the tag that the workflow signature names.
 `image REF` and `release TAG` download into a temporary directory, or into
 `-keep DIR`, which then holds an OCI layout (`DIR/image`) or the release
 assets, plus the trusted roots used, for a later offline re-check; an image
-re-check needs `-content`, since it hashes every blob.
+re-check needs `-content`, since it hashes every blob. An image's `DIR` also
+holds the release's tagger statement.
 
 ```console
 $ eve-sigverify image -tag 17.12.0 docker.io/lfedge/eve:17.12.0-kvm-amd64
 info: verified https://spdx.dev/Document attestation by https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master at 2026-10-30T18:50:12Z (Tlog)
+warning: release 17.12.0 has no 17.12.0.tagger.sigstore.json; who pushed the tag is not recorded
 OK: image sha256:76e5b795105f44b1dd8ae452c8b5d5c8ad0d3bb2e79ff19f458144394d1a9a8b (docker.io/lfedge/eve:17.12.0-kvm-amd64) of release 17.12.0 signed by https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master at 2026-10-30T18:43:12Z (Tlog)
 ```
 
@@ -87,7 +89,9 @@ OK: image sha256:76e5b795105f44b1dd8ae452c8b5d5c8ad0d3bb2e79ff19f458144394d1a9a8
   signature covers the manifest digest, which pins every layer; `-content`
   also downloads and hashes the config and layers. The verdict names the
   verified digest; deploy by that digest, not by tag. Registry credentials
-  are read from the Docker config when present.
+  are read from the Docker config when present. The tagger and approver
+  reports below call the GitHub API; when it is unreachable they warn and the
+  verdict stands.
 - `release TAG` reads the release from the GitHub API, downloads every
   `*.sha256sums` (or those `-variant` names), their bundles, each variant's
   `images.txt`, any `-asset`, and with `-maintainer` the approval bundle, and
@@ -114,16 +118,37 @@ The asset that matches is `images.txt`; name others with `-asset`, e.g.
 `-asset amd64.kvm.generic.installer.raw.zst`, to download and check them too.
 Flags go before the tag.
 
-`release` also reports who pushed the tag and who approved its signing:
+`release` and `image REF` also report who pushed the tag and, with
+`-maintainer`, who approved the release:
+
+```console
+$ eve-sigverify image -tag 17.14.0 -maintainer erik@zededa.com docker.io/lfedge/eve:17.14.0-kvm-amd64
+info: verified https://spdx.dev/Document attestation by https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master at 2026-11-23T21:39:48Z (Tlog)
+OK: tag 17.14.0 pushed by rene (GitHub user ID 62743), recorded in Rekor by https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master
+OK: release 17.14.0 approved by eriknordmark (erik@zededa.com), login from .github/release-signers of lf-edge/eve
+OK: image sha256:ab8433acf9c8b87bb7e5f08c278dee20b339c1af49fc004adce20c4dc1c8ca35 (docker.io/lfedge/eve:17.14.0-kvm-amd64) of release 17.14.0 signed by https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master at 2026-11-23T21:35:50Z (Tlog), approved by erik@zededa.com at 2026-11-24T01:05:58Z (Tlog)
+```
 
 - The tagger comes from `<tag>.tagger.sigstore.json`, an in-toto statement of
   type `https://github.com/<repo>/release-tagger/v1` that `release-sign.yml`
-  signs over every sums file, naming the tag, commit and the pusher's GitHub
-  login and user ID. It is in Rekor. An invalid statement fails; a missing one
+  signs over every image digest and sums file, naming the tag, commit and the
+  pusher's GitHub login and user ID. It is in Rekor. `release` checks it
+  against every sums file; `image REF` downloads it from the release and
+  requires the image's digest (the index's, for an index) among its subjects.
+  An invalid statement fails; a missing or unreachable one is a warning.
+- The approval's certificate carries only the maintainer's email. The account
+  comes from `.github/release-signers`, lines of `<login> <email>`, read from
+  the default branch of `-repo` through the GitHub API, or from `-signers
+  FILE`, so it is as trustworthy as that file. An approver who also pushed the
+  tag fails. An email that is not in the list, or a list that cannot be read,
   is a warning.
-- The approvers of the signing run's deployment environment come from GitHub's
-  run approvals API. GitHub keeps them only with the run, so a deleted run
-  loses them. None found is a warning, and so is a tagger who also approved.
+- `release` also reports the approvers of the signing run's deployment
+  environment, from GitHub's run approvals API. GitHub keeps them only with
+  the run, so a deleted run loses them. None found is a warning, and so is a
+  tagger who also approved.
+
+Offline `image` and `assets` name the approver by email only and do not
+report the tagger.
 
 ## Image
 
