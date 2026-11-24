@@ -26,7 +26,8 @@ eve-sigverify release [common flags] [-variant ARCH.HV.PLATFORM]... [-asset NAME
 eve-sigverify trusted-root -o FILE
 ```
 
-The examples below verify EVE 17.12.0. For a fork's release, name the fork
+The examples below verify EVE 17.12.0, which has no maintainer approval, so its
+online runs pass `-no-approval`. For a fork's release, name the fork
 with `-repo` and the branch its signing workflow runs from with `-signer-ref`.
 
 ## Trusted root
@@ -60,7 +61,8 @@ that called it.
 | `-signer-ref ref` | ref of `release-sign.yml` in the identity (default `refs/heads/master`) |
 | `-tag tag` | the release tag exactly, instead of any release tag |
 | `-environment name` | the signing job's deployment environment (default `release`; empty accepts any) |
-| `-maintainer emails` | an approval of the same release signed by one of these comma-separated emails, issuer `https://github.com/login/oauth` |
+| `-maintainer emails` | an approval of the same release signed by one of these comma-separated emails, issuer `https://github.com/login/oauth`. `release` and `image REF` default to every email in `.github/release-signers` of `-repo` (or `-signers FILE`), so a release without an approval fails |
+| `-no-approval` | `release` and `image REF`: require no approval, for releases that have none |
 | `-identity`, `-identity-regexp`, `-repository`, `-issuer` | override parts of the workflow identity |
 
 A maintainer approval is an in-toto statement of type
@@ -77,7 +79,7 @@ re-check needs `-content`, since it hashes every blob. An image's `DIR` also
 holds the release's tagger statement.
 
 ```console
-$ eve-sigverify image -tag 17.12.0 docker.io/lfedge/eve:17.12.0-kvm-amd64
+$ eve-sigverify image -no-approval -tag 17.12.0 docker.io/lfedge/eve:17.12.0-kvm-amd64
 info: verified https://spdx.dev/Document attestation by https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master at 2026-10-30T18:50:12Z (Tlog)
 warning: release 17.12.0 has no 17.12.0.tagger.sigstore.json; who pushed the tag is not recorded
 OK: image sha256:76e5b795105f44b1dd8ae452c8b5d5c8ad0d3bb2e79ff19f458144394d1a9a8b (docker.io/lfedge/eve:17.12.0-kvm-amd64) of release 17.12.0 signed by https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master at 2026-10-30T18:43:12Z (Tlog)
@@ -94,7 +96,7 @@ OK: image sha256:76e5b795105f44b1dd8ae452c8b5d5c8ad0d3bb2e79ff19f458144394d1a9a8
   verdict stands.
 - `release TAG` reads the release from the GitHub API, downloads every
   `*.sha256sums` (or those `-variant` names), their bundles, each variant's
-  `images.txt`, any `-asset`, and with `-maintainer` the approval bundle, and
+  `images.txt`, any `-asset`, and unless `-no-approval` the approval bundle, and
   verifies each sums file as `assets` does. `GH_TOKEN`, when set, is sent to
   `api.github.com` only.
 - A release must be a GitHub immutable release. Its release attestation,
@@ -106,7 +108,7 @@ OK: image sha256:76e5b795105f44b1dd8ae452c8b5d5c8ad0d3bb2e79ff19f458144394d1a9a8
   release that is not immutable and says so in the verdict:
 
 ```console
-$ eve-sigverify release -variant amd64.kvm.generic 17.12.0
+$ eve-sigverify release -no-approval -variant amd64.kvm.generic 17.12.0
 OK: amd64.kvm.generic.sha256sums of release 17.12.0 signed by https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master at 2026-10-30T18:52:01Z (Tlog); 1 assets match, 7 listed but not present
 warning: release 17.12.0 has no 17.12.0.tagger.sigstore.json; who pushed the tag is not recorded
 info: release environment approved by christoph-zededa (GitHub user ID 121871801), recorded only by GitHub in https://github.com/lf-edge/eve/actions/runs/41071947071/attempts/1
@@ -118,11 +120,11 @@ The asset that matches is `images.txt`; name others with `-asset`, e.g.
 `-asset amd64.kvm.generic.installer.raw.zst`, to download and check them too.
 Flags go before the tag.
 
-`release` and `image REF` also report who pushed the tag and, with
-`-maintainer`, who approved the release:
+`release` and `image REF` also report who pushed the tag and who
+approved the release:
 
 ```console
-$ eve-sigverify image -tag 17.14.0 -maintainer erik@zededa.com docker.io/lfedge/eve:17.14.0-kvm-amd64
+$ eve-sigverify image -tag 17.14.0 docker.io/lfedge/eve:17.14.0-kvm-amd64
 info: verified https://spdx.dev/Document attestation by https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master at 2026-11-23T21:39:48Z (Tlog)
 OK: tag 17.14.0 pushed by rene (GitHub user ID 62743), recorded in Rekor by https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master
 OK: release 17.14.0 approved by eriknordmark (erik@zededa.com), login from .github/release-signers of lf-edge/eve
@@ -140,8 +142,9 @@ OK: image sha256:ab8433acf9c8b87bb7e5f08c278dee20b339c1af49fc004adce20c4dc1c8ca3
   comes from `.github/release-signers`, lines of `<login> <email>`, read from
   the default branch of `-repo` through the GitHub API, or from `-signers
   FILE`, so it is as trustworthy as that file. An approver who also pushed the
-  tag fails. An email that is not in the list, or a list that cannot be read,
-  is a warning.
+  tag fails. With `-maintainer`, an email that is not in the list, or a list
+  that cannot be read, is a warning; without it, an unreadable list is a usage
+  error.
 - `release` also reports the approvers of the signing run's deployment
   environment, from GitHub's run approvals API. GitHub keeps them only with
   the run, so a deleted run loses them. None found is a warning, and so is a

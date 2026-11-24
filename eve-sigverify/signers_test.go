@@ -105,3 +105,40 @@ func TestLoadSigners(t *testing.T) {
 		t.Error("accepted an absent file")
 	}
 }
+
+func TestApprovalPolicy(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, content string) string {
+		f := filepath.Join(dir, name)
+		if err := os.WriteFile(f, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return f
+	}
+	list := write("list", "alice alice@example.com\nbob bob@example.com\nalice2 ALICE@example.com\n")
+	empty := write("empty", "# nobody\n")
+	tests := []struct {
+		name    string
+		named   []string
+		file    string
+		want    []string
+		wantErr string
+	}{
+		{name: "every signer by default", file: list, want: []string{"alice@example.com", "bob@example.com"}},
+		{name: "named maintainers kept", named: []string{"x@example.com"}, file: list, want: []string{"x@example.com"}},
+		{name: "empty list", file: empty, wantErr: "lists no signers"},
+		{name: "unreadable list is the policy", file: filepath.Join(dir, "absent"), wantErr: "-no-approval"},
+		{name: "unreadable -signers file with named maintainers", named: []string{"x@example.com"}, file: filepath.Join(dir, "absent"), wantErr: "no such file"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := defaultPolicy(forkRepo, forkSigner)
+			p.maintainers = tc.named
+			s, err := approvalPolicy(&p, tc.file)
+			checkErr(t, err, tc.wantErr)
+			if err == nil && (!reflect.DeepEqual(p.maintainers, tc.want) || s.source != tc.file) {
+				t.Fatalf("maintainers %v, source %q; want %v, %q", p.maintainers, s.source, tc.want, tc.file)
+			}
+		})
+	}
+}
