@@ -273,12 +273,17 @@ func (v *verifier) verifyImageOnline(ref, platform string, content bool, dir str
 }
 
 // reportImagePeople prints who pushed the tag of the release image digest
-// belongs to and which account approved it. The pusher comes from the
-// release's tagger statement, fetched into dir from GitHub, which must name
-// digest among its subjects; a statement that is missing or unreachable only
-// warns, an invalid one fails.
+// belongs to and which account approved it. The pusher comes from the tagger
+// statement among the image's referrers, if res has one, and otherwise from
+// the release's tagger statement, fetched into dir from GitHub, which must
+// name digest among its subjects; a statement that is missing or unreachable
+// only warns, an invalid one fails.
 func (v *verifier) reportImagePeople(dir, digest string, res imageResult) error {
-	var tagger githubUser
+	tagger := res.tagger
+	if tagger.Login != "" {
+		v.printTagger(res.tag, tagger)
+		return v.reportApproval(res.tag, tagger, res.approver)
+	}
 	name := res.tag + ".tagger.sigstore.json"
 	data, found, err := v.fetchReleaseAsset(res.tag, name, dir)
 	switch {

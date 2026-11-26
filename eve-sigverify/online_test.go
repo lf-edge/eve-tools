@@ -266,6 +266,8 @@ func TestReportImagePeople(t *testing.T) {
 		{name: "release without tagger statement", res: imageResult{tag: "9.9.0-r1", commit: taggerCommit}, digest: image},
 		{name: "invalid tagger statement", res: imageResult{tag: "9.9.0-r2", commit: taggerCommit}, digest: image, wantErr: "tagger.sigstore.json"},
 		{name: "release not found", res: imageResult{tag: "9.9.0-r3", commit: taggerCommit}, digest: image},
+		{name: "tagger from referrer", res: imageResult{tag: "9.9.0-r2", commit: taggerCommit, tagger: githubUser{Login: taggerLogin, ID: taggerID}, approver: "approver@example.com"}, digest: image, signers: signers},
+		{name: "referrer tagger approved", res: imageResult{tag: "9.9.0-r2", commit: taggerCommit, tagger: githubUser{Login: taggerLogin, ID: taggerID}, approver: "tagger@example.com"}, digest: image, signers: signers, wantErr: taggerLogin + " both pushed tag"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

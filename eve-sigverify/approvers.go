@@ -49,25 +49,39 @@ func (v *verifier) checkTagger(data []byte, sums [][]byte, tag, commit string) (
 // checkTaggerFor is checkTagger for a statement that must have every one of
 // artifacts among its subjects.
 func (v *verifier) checkTaggerFor(data []byte, artifacts []verify.ArtifactPolicyOption, tag, commit string) (githubUser, error) {
-	var p taggerPredicate
+	if len(artifacts) == 0 {
+		return githubUser{}, errors.New("no artifact to bind the statement to")
+	}
+	var tagger githubUser
 	for _, a := range artifacts {
 		r, t, err := v.verifyRelease(data, a)
 		if err != nil {
 			return githubUser{}, err
 		}
-		if t != tag {
-			return githubUser{}, fmt.Errorf("signed for release %s, not %s", t, tag)
-		}
-		if r.Statement == nil || r.Statement.PredicateType != v.policy.taggerType {
-			return githubUser{}, fmt.Errorf("not a %s statement", v.policy.taggerType)
-		}
-		pj, err := json.Marshal(r.Statement.Predicate)
-		if err != nil {
+		if tagger, err = v.taggerOf(r, t, tag, commit); err != nil {
 			return githubUser{}, err
 		}
-		if err := json.Unmarshal(pj, &p); err != nil {
-			return githubUser{}, fmt.Errorf("predicate: %v", err)
-		}
+	}
+	return tagger, nil
+}
+
+// taggerOf returns who pushed tag, as the verified statement r names them.
+// signedTag is the release tag of the signing run that produced r. The
+// statement must be a tagger statement signed for tag, and name tag and commit.
+func (v *verifier) taggerOf(r *verify.VerificationResult, signedTag, tag, commit string) (githubUser, error) {
+	if signedTag != tag {
+		return githubUser{}, fmt.Errorf("signed for release %s, not %s", signedTag, tag)
+	}
+	if r.Statement == nil || r.Statement.PredicateType != v.policy.taggerType {
+		return githubUser{}, fmt.Errorf("not a %s statement", v.policy.taggerType)
+	}
+	pj, err := json.Marshal(r.Statement.Predicate)
+	if err != nil {
+		return githubUser{}, err
+	}
+	var p taggerPredicate
+	if err := json.Unmarshal(pj, &p); err != nil {
+		return githubUser{}, fmt.Errorf("predicate: %v", err)
 	}
 	if p.Tag != tag || !strings.EqualFold(p.Commit, commit) {
 		return githubUser{}, fmt.Errorf("names %s at %s, not %s at %s", p.Tag, p.Commit, tag, commit)
@@ -76,6 +90,33 @@ func (v *verifier) checkTaggerFor(data []byte, artifacts []verify.ArtifactPolicy
 		return githubUser{}, errors.New("names no tagger")
 	}
 	return githubUser{Login: p.Tagger.Login, ID: p.Tagger.ID}, nil
+}
+
+// taggerReferrer is a tagger statement among an image's referrers that
+// verified under the release policy: the result, the release tag of the
+// signing run, and the digest of the referrer manifest for messages.
+type taggerReferrer struct {
+	result   *verify.VerificationResult
+	tag      string
+	manifest string
+}
+
+// referrerTagger returns who pushed tag, as the tagger statements among an
+// image's referrers name them, or the zero value when there are none. Each
+// must name tag and commit, and they must agree.
+func (v *verifier) referrerTagger(statements []taggerReferrer, tag, commit string) (githubUser, error) {
+	var tagger githubUser
+	for _, s := range statements {
+		u, err := v.taggerOf(s.result, s.tag, tag, commit)
+		if err != nil {
+			return githubUser{}, fmt.Errorf("tagger statement %s: %v", s.manifest, err)
+		}
+		if tagger != (githubUser{}) && u != tagger {
+			return githubUser{}, fmt.Errorf("tagger statements name %s and %s", tagger, u)
+		}
+		tagger = u
+	}
+	return tagger, nil
 }
 
 // runInvocation matches Fulcio's Run Invocation URI for a GitHub Actions run.

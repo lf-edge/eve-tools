@@ -75,8 +75,9 @@ release; it must name the tag that the workflow signature names.
 `image REF` and `release TAG` download into a temporary directory, or into
 `-keep DIR`, which then holds an OCI layout (`DIR/image`) or the release
 assets, plus the trusted roots used, for a later offline re-check; an image
-re-check needs `-content`, since it hashes every blob. An image's `DIR` also
-holds the release's tagger statement.
+re-check needs `-content`, since it hashes every blob. The tagger statement is
+in `DIR/image` when the image carries one as a referrer, and otherwise in
+`DIR`, downloaded from the release.
 
 ```console
 $ eve-sigverify image -no-approval -tag 17.12.0 docker.io/lfedge/eve:17.12.0-kvm-amd64
@@ -135,9 +136,13 @@ OK: image sha256:ab8433acf9c8b87bb7e5f08c278dee20b339c1af49fc004adce20c4dc1c8ca3
   type `https://github.com/<repo>/release-tagger/v1` that `release-sign.yml`
   signs over every image digest and sums file, naming the tag, commit and the
   pusher's GitHub login and user ID. It is in Rekor. `release` checks it
-  against every sums file; `image REF` downloads it from the release and
-  requires the image's digest (the index's, for an index) among its subjects.
-  An invalid statement fails; a missing or unreachable one is a warning.
+  against every sums file. `image REF` reads it from the image's referrers
+  when the release attached one, and otherwise downloads it from the release.
+  It must list the image's digest among its subjects (the index's, when
+  downloaded for an index). An invalid statement fails, as does a pusher that
+  differs between the statements of one image; a missing or unreachable one is
+  a warning. A referrer that does not verify is reported as rejected and
+  ignored.
 - The approval's certificate carries only the maintainer's email. The account
   comes from `.github/release-signers`, lines of `<login> <email>`, read from
   the default branch of `-repo` through the GitHub API, or from `-signers
@@ -150,20 +155,21 @@ OK: image sha256:ab8433acf9c8b87bb7e5f08c278dee20b339c1af49fc004adce20c4dc1c8ca3
   the run, so a deleted run loses them. None found is a warning, and so is a
   tagger who also approved.
 
-Offline `image` and `assets` name the approver by email only and do not
-report the tagger.
+Offline, `image` reports the tagger from the image's referrers and `assets`
+does not report it; both name the approver by email only.
 
 ## Image
 
 The input is an OCI image layout holding the image and its referrers, where
 cosign 3 stores the signature and SBOM attestation bundles and where the
-maintainer approval is attached. `oras` copies them; `cosign save` does not
-include referrers.
+release's tagger statement and the maintainer approval are attached. `oras`
+copies them; `cosign save` does not include referrers.
 
 ```console
 $ oras copy --recursive --to-oci-layout docker.io/lfedge/eve:17.12.0-kvm-amd64 ./layout
 $ eve-sigverify image -trusted-root trusted_root.json -tag 17.12.0 ./layout
 info: verified https://spdx.dev/Document attestation by https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master at 2026-10-30T18:50:12Z (Tlog)
+warning: image sha256:76e5b795105f44b1dd8ae452c8b5d5c8ad0d3bb2e79ff19f458144394d1a9a8b has no tagger statement among its referrers; who pushed the tag is not recorded
 OK: image sha256:76e5b795105f44b1dd8ae452c8b5d5c8ad0d3bb2e79ff19f458144394d1a9a8b (11 blobs) of release 17.12.0 signed by https://github.com/lf-edge/eve/.github/workflows/release-sign.yml@refs/heads/master at 2026-10-30T18:43:12Z (Tlog)
 ```
 
