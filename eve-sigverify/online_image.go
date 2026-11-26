@@ -5,16 +5,19 @@ package main
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/sigstore/sigstore-go/pkg/verify"
 )
 
 // maxBundleSize caps a fetched Sigstore bundle; release bundles are a few KiB.
@@ -232,32 +235,71 @@ func fetchReferrers(repo name.Repository, subject v1.Hash, w *layoutWriter, opts
 
 // verifyImageOnline fetches ref into dir and verifies it. For an index, the
 // index and its platform manifest must both be signed for the same release.
+// It then reports who pushed the release tag, from the release's tagger
+// statement on GitHub, and who approved it.
 func (v *verifier) verifyImageOnline(ref, platform string, content bool, dir string) error {
-	f, err := fetchImage(ref, platform, content, dir)
+	layoutDir := filepath.Join(dir, "image")
+	f, err := fetchImage(ref, platform, content, layoutDir)
 	if err != nil {
 		return err
 	}
-	l, err := openLayout(dir)
+	l, err := openLayout(layoutDir)
 	if err != nil {
 		return err
 	}
-	top, err := v.checkImage(l, f.top, content)
+	res, err := v.checkImage(l, f.top, content)
 	if err != nil {
 		return err
 	}
-	if f.platform == "" {
-		fmt.Printf("OK: image %s (%s) of release %s signed by %s%s\n", f.top, ref, top.tag, top.signer, top.approved)
-		return nil
+	verdict := fmt.Sprintf("OK: image %s (%s) of release %s signed by %s%s", f.top, ref, res.tag, res.signer, res.approved)
+	if f.platform != "" {
+		pm, err := v.checkImage(l, f.platform, content)
+		if err != nil {
+			return err
+		}
+		if pm.tag != res.tag || pm.commit != res.commit {
+			return fmt.Errorf("index %s is signed for release %s at commit %s, its %s manifest %s for %s at %s",
+				f.top, res.tag, res.commit, platform, f.platform, pm.tag, pm.commit)
+		}
+		res = pm
+		verdict = fmt.Sprintf("OK: image %s (%s, index %s) of release %s signed by %s%s",
+			f.platform, platform, f.top, pm.tag, pm.signer, pm.approved)
 	}
-	pm, err := v.checkImage(l, f.platform, content)
-	if err != nil {
-		return err
+	if err := v.reportImagePeople(dir, f.top, res); err != nil {
+		return fmt.Errorf("release %s: %v", res.tag, err)
 	}
-	if pm.tag != top.tag {
-		return fmt.Errorf("index %s is signed for release %s, its %s manifest %s for %s",
-			f.top, top.tag, platform, f.platform, pm.tag)
-	}
-	fmt.Printf("OK: image %s (%s, index %s) of release %s signed by %s%s\n",
-		f.platform, platform, f.top, pm.tag, pm.signer, pm.approved)
+	fmt.Println(verdict)
 	return nil
+}
+
+// reportImagePeople prints who pushed the tag of the release image digest
+// belongs to and which account approved it. The pusher comes from the tagger
+// statement among the image's referrers, if res has one, and otherwise from
+// the release's tagger statement, fetched into dir from GitHub, which must
+// name digest among its subjects; a statement that is missing or unreachable
+// only warns, an invalid one fails.
+func (v *verifier) reportImagePeople(dir, digest string, res imageResult) error {
+	tagger := res.tagger
+	if tagger.Login != "" {
+		v.printTagger(res.tag, tagger)
+		return v.reportApproval(res.tag, tagger, res.approver)
+	}
+	name := res.tag + ".tagger.sigstore.json"
+	data, found, err := v.fetchReleaseAsset(res.tag, name, dir)
+	switch {
+	case err != nil:
+		fmt.Fprintf(os.Stderr, "warning: cannot read %s of release %s: %v; who pushed the tag is not recorded\n", name, res.tag, err)
+	case !found:
+		fmt.Fprintf(os.Stderr, "warning: release %s has no %s; who pushed the tag is not recorded\n", res.tag, name)
+	default:
+		d, err := hex.DecodeString(strings.TrimPrefix(digest, "sha256:"))
+		if err != nil {
+			return err
+		}
+		if tagger, err = v.checkTaggerFor(data, []verify.ArtifactPolicyOption{verify.WithArtifactDigest("sha256", d)}, res.tag, res.commit); err != nil {
+			return fmt.Errorf("%s: %v", name, err)
+		}
+		v.printTagger(res.tag, tagger)
+	}
+	return v.reportApproval(res.tag, tagger, res.approver)
 }

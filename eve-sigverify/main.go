@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/sigstore/sigstore-go/pkg/root"
@@ -45,7 +46,11 @@ policy flags:
   -environment NAME        required deployment environment of the signing job
                            (default ` + releaseEnv + `; empty accepts any)
   -maintainer EMAILS       require an approval of the release signed by one of these
-                           comma-separated maintainer emails
+                           comma-separated maintainer emails (release and image REF
+                           default to every email in the release signers list)
+  -no-approval             release and image REF: do not require an approval
+  -signers FILE            release signers list ("<login> <email>" lines), release and
+                           image REF only (default: .github/release-signers of -repo)
   -identity URI            exact certificate identity (workflow@ref)
   -identity-regexp RE      certificate identity regexp
   -repository URI          certificate source repository (default https://github.com/OWNER/NAME)
@@ -80,6 +85,36 @@ func main() {
 	os.Exit(1)
 }
 
+// approvalPolicy loads the release signers from file, or from the policy
+// repository, and, when p names no maintainers, requires an approval by any
+// signer in the list. An unreadable list is a usage error when it is the
+// policy, and otherwise only costs the account names.
+func approvalPolicy(p *policy, file string) (releaseSigners, error) {
+	signers, err := loadSigners(file, p.repo)
+	if len(p.maintainers) > 0 {
+		switch {
+		case err == nil:
+		case file != "":
+			return signers, fmt.Errorf("%w: %v", errUsage, err)
+		default:
+			fmt.Fprintf(os.Stderr, "warning: cannot read the release signers of %s: %v; the account that approved the release is unknown\n", p.repo, err)
+		}
+		return signers, nil
+	}
+	if err != nil {
+		return signers, fmt.Errorf("%w: %v; name the approvers with -maintainer or skip the approval with -no-approval", errUsage, err)
+	}
+	for _, e := range signers.entries {
+		if !slices.ContainsFunc(p.maintainers, func(m string) bool { return strings.EqualFold(m, e[1]) }) {
+			p.maintainers = append(p.maintainers, e[1])
+		}
+	}
+	if len(p.maintainers) == 0 {
+		return signers, fmt.Errorf("%w: %s lists no signers; name the approvers with -maintainer or skip the approval with -no-approval", errUsage, signers.source)
+	}
+	return signers, nil
+}
+
 // multiFlag collects a repeatable string flag.
 type multiFlag []string
 
@@ -95,6 +130,8 @@ func runVerify(kind string, args []string) error {
 	tag := fs.String("tag", "", "required release tag")
 	env := fs.String("environment", releaseEnv, "required deployment environment")
 	maintainers := fs.String("maintainer", "", "comma-separated maintainer emails")
+	signersFile := fs.String("signers", "", "release signers list naming the account behind each maintainer email (release mode and image REF; default: .github/release-signers of -repo)")
+	noApproval := fs.Bool("no-approval", false, "do not require a maintainer approval (release mode and image REF)")
 	approval := fs.String("approval", "", "maintainer approval bundle (assets mode)")
 	identity := fs.String("identity", "", "exact certificate identity")
 	identityRegexp := fs.String("identity-regexp", "", "certificate identity regexp")
@@ -167,10 +204,23 @@ func runVerify(kind string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("%w: %v", errUsage, err)
 	}
+	if (*signersFile != "" || *noApproval) && !online {
+		return fmt.Errorf("%w: -signers and -no-approval apply to release and image REF", errUsage)
+	}
+	if *noApproval && len(p.maintainers) > 0 {
+		return fmt.Errorf("%w: -no-approval contradicts -maintainer", errUsage)
+	}
+	var signers releaseSigners
+	if online && !*noApproval {
+		if signers, err = approvalPolicy(&p, *signersFile); err != nil {
+			return err
+		}
+	}
 	v, err := newVerifier(tr, p)
 	if err != nil {
 		return fmt.Errorf("%w: %v", errUsage, err)
 	}
+	v.signers = signers
 	switch {
 	case kind == "release":
 		return v.verifyReleaseOnline(fs.Arg(0), releaseOptions{
@@ -180,7 +230,7 @@ func runVerify(kind string, args []string) error {
 		if *digest != "" {
 			return fmt.Errorf("%w: give the digest in REF (name@sha256:...), not -digest", errUsage)
 		}
-		return v.verifyImageOnline(fs.Arg(0), *platform, *content, filepath.Join(dir, "image"))
+		return v.verifyImageOnline(fs.Arg(0), *platform, *content, dir)
 	case kind == "image":
 		if fs.NArg() != 1 {
 			return fmt.Errorf("%w: image takes one OCI layout directory or reference", errUsage)

@@ -39,25 +39,49 @@ func (u githubUser) String() string { return fmt.Sprintf("%s (GitHub user ID %d)
 // release policy with every sums file among its subjects, and returns who
 // pushed tag. The statement must name tag and commit.
 func (v *verifier) checkTagger(data []byte, sums [][]byte, tag, commit string) (githubUser, error) {
+	artifacts := make([]verify.ArtifactPolicyOption, len(sums))
+	for i, s := range sums {
+		artifacts[i] = verify.WithArtifact(strings.NewReader(string(s)))
+	}
+	return v.checkTaggerFor(data, artifacts, tag, commit)
+}
+
+// checkTaggerFor is checkTagger for a statement that must have every one of
+// artifacts among its subjects.
+func (v *verifier) checkTaggerFor(data []byte, artifacts []verify.ArtifactPolicyOption, tag, commit string) (githubUser, error) {
+	if len(artifacts) == 0 {
+		return githubUser{}, errors.New("no artifact to bind the statement to")
+	}
+	var tagger githubUser
+	for _, a := range artifacts {
+		r, t, err := v.verifyRelease(data, a)
+		if err != nil {
+			return githubUser{}, err
+		}
+		if tagger, err = v.taggerOf(r, t, tag, commit); err != nil {
+			return githubUser{}, err
+		}
+	}
+	return tagger, nil
+}
+
+// taggerOf returns who pushed tag, as the verified statement r names them.
+// signedTag is the release tag of the signing run that produced r. The
+// statement must be a tagger statement signed for tag, and name tag and commit.
+func (v *verifier) taggerOf(r *verify.VerificationResult, signedTag, tag, commit string) (githubUser, error) {
+	if signedTag != tag {
+		return githubUser{}, fmt.Errorf("signed for release %s, not %s", signedTag, tag)
+	}
+	if r.Statement == nil || r.Statement.PredicateType != v.policy.taggerType {
+		return githubUser{}, fmt.Errorf("not a %s statement", v.policy.taggerType)
+	}
+	pj, err := json.Marshal(r.Statement.Predicate)
+	if err != nil {
+		return githubUser{}, err
+	}
 	var p taggerPredicate
-	for _, s := range sums {
-		r, t, err := v.verifyRelease(data, verify.WithArtifact(strings.NewReader(string(s))))
-		if err != nil {
-			return githubUser{}, err
-		}
-		if t != tag {
-			return githubUser{}, fmt.Errorf("signed for release %s, not %s", t, tag)
-		}
-		if r.Statement == nil || r.Statement.PredicateType != v.policy.taggerType {
-			return githubUser{}, fmt.Errorf("not a %s statement", v.policy.taggerType)
-		}
-		pj, err := json.Marshal(r.Statement.Predicate)
-		if err != nil {
-			return githubUser{}, err
-		}
-		if err := json.Unmarshal(pj, &p); err != nil {
-			return githubUser{}, fmt.Errorf("predicate: %v", err)
-		}
+	if err := json.Unmarshal(pj, &p); err != nil {
+		return githubUser{}, fmt.Errorf("predicate: %v", err)
 	}
 	if p.Tag != tag || !strings.EqualFold(p.Commit, commit) {
 		return githubUser{}, fmt.Errorf("names %s at %s, not %s at %s", p.Tag, p.Commit, tag, commit)
@@ -66,6 +90,33 @@ func (v *verifier) checkTagger(data []byte, sums [][]byte, tag, commit string) (
 		return githubUser{}, errors.New("names no tagger")
 	}
 	return githubUser{Login: p.Tagger.Login, ID: p.Tagger.ID}, nil
+}
+
+// taggerReferrer is a tagger statement among an image's referrers that
+// verified under the release policy: the result, the release tag of the
+// signing run, and the digest of the referrer manifest for messages.
+type taggerReferrer struct {
+	result   *verify.VerificationResult
+	tag      string
+	manifest string
+}
+
+// referrerTagger returns who pushed tag, as the tagger statements among an
+// image's referrers name them, or the zero value when there are none. Each
+// must name tag and commit, and they must agree.
+func (v *verifier) referrerTagger(statements []taggerReferrer, tag, commit string) (githubUser, error) {
+	var tagger githubUser
+	for _, s := range statements {
+		u, err := v.taggerOf(s.result, s.tag, tag, commit)
+		if err != nil {
+			return githubUser{}, fmt.Errorf("tagger statement %s: %v", s.manifest, err)
+		}
+		if tagger != (githubUser{}) && u != tagger {
+			return githubUser{}, fmt.Errorf("tagger statements name %s and %s", tagger, u)
+		}
+		tagger = u
+	}
+	return tagger, nil
 }
 
 // runInvocation matches Fulcio's Run Invocation URI for a GitHub Actions run.
@@ -102,10 +153,39 @@ func (v *verifier) environmentApprovers(runURI string) ([]githubUser, error) {
 	return users, nil
 }
 
+// printTagger prints who pushed tag, as the verified tagger statement names them.
+func (v *verifier) printTagger(tag string, tagger githubUser) {
+	fmt.Printf("OK: tag %s pushed by %s, recorded in Rekor by %s\n", tag, tagger, v.policy.identity)
+}
+
+// reportApproval prints which GitHub account the signers list gives for the
+// email of the maintainer who approved tag, and fails when that account is
+// the one that pushed it. tagger is the zero value when the pusher is not
+// recorded. Without a signers list or an approval there is nothing to report.
+func (v *verifier) reportApproval(tag string, tagger githubUser, email string) error {
+	if email == "" || v.signers.source == "" {
+		return nil
+	}
+	logins := v.signers.logins(email)
+	if len(logins) == 0 {
+		fmt.Fprintf(os.Stderr, "warning: %s is not in %s; the account that approved release %s is unknown\n",
+			email, v.signers.source, tag)
+		return nil
+	}
+	for _, l := range logins {
+		if tagger.Login != "" && strings.EqualFold(l, tagger.Login) {
+			return fmt.Errorf("%s both pushed tag %s and approved it", l, tag)
+		}
+	}
+	fmt.Printf("OK: release %s approved by %s (%s), login from %s\n", tag, strings.Join(logins, ", "), email, v.signers.source)
+	return nil
+}
+
 // reportApprovers prints who pushed the release tag, from the tagger
-// statement in dir, and who approved the signing run's environment, from
-// GitHub, and warns when either is missing or they are the same account.
-// An invalid tagger statement fails; a missing one only warns.
+// statement in dir, who approved the release, from the maintainer approval,
+// and who approved the signing run's environment, from GitHub, and warns when
+// either is missing or they are the same account. An invalid tagger statement
+// fails; a missing one only warns. A maintainer who also pushed the tag fails.
 func (v *verifier) reportApprovers(dir, tag string, res assetsResult, sums []string) error {
 	var tagger githubUser
 	name := tag + ".tagger.sigstore.json"
@@ -127,7 +207,10 @@ func (v *verifier) reportApprovers(dir, tag string, res assetsResult, sums []str
 		if tagger, err = v.checkTagger(data, contents, tag, res.commit); err != nil {
 			return fmt.Errorf("%s: %v", name, err)
 		}
-		fmt.Printf("OK: tag %s pushed by %s, recorded in Rekor by %s\n", tag, tagger, v.policy.identity)
+		v.printTagger(tag, tagger)
+	}
+	if err := v.reportApproval(tag, tagger, res.approver); err != nil {
+		return err
 	}
 
 	approvers, err := v.environmentApprovers(res.runURI)

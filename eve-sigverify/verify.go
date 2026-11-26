@@ -33,6 +33,7 @@ type verifier struct {
 	identity    verify.CertificateIdentity
 	maintainers []verify.CertificateIdentity
 	policy      policy
+	signers     releaseSigners // names the accounts behind maintainer emails
 }
 
 // approvalPredicate is the predicate of a maintainer's release approval.
@@ -84,7 +85,8 @@ func signer(r *verify.VerificationResult) string {
 
 // verifyImage checks that the layout holds the complete image and that at
 // least one of its referrers is a cosign signature over its manifest digest
-// matching the policy.
+// matching the policy. It reports who pushed the release tag when a tagger
+// statement is among the referrers, and warns when none is.
 func (v *verifier) verifyImage(dir, digest string) error {
 	l, err := openLayout(dir)
 	if err != nil {
@@ -98,14 +100,23 @@ func (v *verifier) verifyImage(dir, digest string) error {
 	if err != nil {
 		return err
 	}
+	if r.tagger.Login != "" {
+		v.printTagger(r.tag, r.tagger)
+	} else {
+		fmt.Fprintf(os.Stderr, "warning: image %s has no tagger statement among its referrers; who pushed the tag is not recorded\n", target)
+	}
 	fmt.Printf("OK: image %s (%d blobs) of release %s signed by %s%s\n", target, r.blobs, r.tag, r.signer, r.approved)
 	return nil
 }
 
-// imageResult is what checkImage verified about one manifest or index.
+// imageResult is what checkImage verified about one manifest or index: the
+// release tag, the commit and signer of its signature, the approver (email)
+// with the text a verdict line appends for it, and who pushed the tag, from
+// a tagger statement among its referrers (the zero value when there is none).
 type imageResult struct {
-	tag, signer, approved string
-	blobs                 int
+	tag, commit, signer, approver, approved string
+	tagger                                  githubUser
+	blobs                                   int
 }
 
 // checkImage verifies the manifest or index target in l and its referrers.
@@ -132,6 +143,7 @@ func (v *verifier) checkImage(l *layout, target string, content bool) (imageResu
 	var signed *verify.VerificationResult
 	var tag string
 	var approvals []*verify.VerificationResult
+	var taggers []taggerReferrer
 	var failures []string
 	for _, rb := range bundles {
 		r, t, err := v.verifyRelease(rb.json, artifact)
@@ -145,6 +157,10 @@ func (v *verifier) checkImage(l *layout, target string, content bool) (imageResu
 		}
 		if r.Statement == nil {
 			failures = append(failures, fmt.Sprintf("%s: not a DSSE statement", rb.manifestDigest))
+			continue
+		}
+		if r.Statement.PredicateType == v.policy.taggerType {
+			taggers = append(taggers, taggerReferrer{result: r, tag: t, manifest: rb.manifestDigest})
 			continue
 		}
 		if r.Statement.PredicateType != signPredicate {
@@ -164,7 +180,20 @@ func (v *verifier) checkImage(l *layout, target string, content bool) (imageResu
 	if err != nil {
 		return res, fmt.Errorf("image %s: %v", target, err)
 	}
-	return imageResult{tag: tag, signer: signer(signed), approved: approved, blobs: blobs}, nil
+	commit := signed.Signature.Certificate.SourceRepositoryDigest
+	tagger, err := v.referrerTagger(taggers, tag, commit)
+	if err != nil {
+		return res, fmt.Errorf("image %s: %v", target, err)
+	}
+	return imageResult{
+		tag:      tag,
+		commit:   commit,
+		signer:   signer(signed),
+		approver: approved.email,
+		approved: approved.verdict(),
+		tagger:   tagger,
+		blobs:    blobs,
+	}, nil
 }
 
 // verifyRelease checks a bundle against the release policy and returns the
@@ -197,11 +226,26 @@ func (v *verifier) verifyApproval(data []byte, artifact verify.ArtifactPolicyOpt
 	return r, nil
 }
 
+// maintainerApproval is the maintainer who approved a release: the email in the
+// approval's certificate and the signer text of a verdict line. The zero
+// value means no approval was required.
+type maintainerApproval struct {
+	email, by string
+}
+
+// verdict is what a verdict line appends for the approval.
+func (a maintainerApproval) verdict() string {
+	if a.by == "" {
+		return ""
+	}
+	return ", approved by " + a.by
+}
+
 // approvedBy returns, when the policy names maintainers, which one approved
 // release tag, or an error if none did.
-func (v *verifier) approvedBy(approvals []*verify.VerificationResult, tag string) (string, error) {
+func (v *verifier) approvedBy(approvals []*verify.VerificationResult, tag string) (maintainerApproval, error) {
 	if len(v.maintainers) == 0 {
-		return "", nil
+		return maintainerApproval{}, nil
 	}
 	for _, a := range approvals {
 		pj, err := json.Marshal(a.Statement.Predicate)
@@ -214,9 +258,9 @@ func (v *verifier) approvedBy(approvals []*verify.VerificationResult, tag string
 				signer(a), p.Repository, p.Release, v.policy.repo, tag)
 			continue
 		}
-		return ", approved by " + signer(a), nil
+		return maintainerApproval{email: a.Signature.Certificate.SubjectAlternativeName, by: signer(a)}, nil
 	}
-	return "", fmt.Errorf("no approval of release %s by %s", tag, strings.Join(v.policy.maintainers, ", "))
+	return maintainerApproval{}, fmt.Errorf("no approval of release %s by %s", tag, strings.Join(v.policy.maintainers, ", "))
 }
 
 func (v *verifier) verifyBundle(data []byte, artifact verify.ArtifactPolicyOption,
@@ -253,9 +297,10 @@ func (v *verifier) verifyAssets(dir, sums, approval string) error {
 }
 
 // assetsResult is what checkAssets verified: the release tag, the commit
-// the signing run built and the run, from the workflow certificate.
+// the signing run built and the run, from the workflow certificate, and the
+// email of the maintainer who approved the release, if one was required.
 type assetsResult struct {
-	tag, commit, runURI string
+	tag, commit, runURI, approver string
 }
 
 func (v *verifier) checkAssets(dir, sums, approval string) (assetsResult, error) {
@@ -274,7 +319,7 @@ func (v *verifier) checkAssets(dir, sums, approval string) (assetsResult, error)
 	}
 	res = assetsResult{tag: tag, commit: r.Signature.Certificate.SourceRepositoryDigest,
 		runURI: r.Signature.Certificate.RunInvocationURI}
-	approved := ""
+	var approved maintainerApproval
 	if len(v.maintainers) > 0 {
 		if approval == "" {
 			approval = filepath.Join(dir, tag+".maintainer.sigstore.json")
@@ -290,6 +335,7 @@ func (v *verifier) checkAssets(dir, sums, approval string) (assetsResult, error)
 		if approved, err = v.approvedBy([]*verify.VerificationResult{a}, tag); err != nil {
 			return res, fmt.Errorf("%s: %v", filepath.Base(sums), err)
 		}
+		res.approver = approved.email
 	}
 	want, err := parseSums(sumsData)
 	if err != nil {
@@ -315,7 +361,7 @@ func (v *verifier) checkAssets(dir, sums, approval string) (assetsResult, error)
 			errUsage, len(want), filepath.Base(sums), dir)
 	}
 	fmt.Printf("OK: %s of release %s signed by %s%s; %d assets match, %d listed but not present\n",
-		filepath.Base(sums), tag, signer(r), approved, checked, missing)
+		filepath.Base(sums), tag, signer(r), approved.verdict(), checked, missing)
 	return res, nil
 }
 

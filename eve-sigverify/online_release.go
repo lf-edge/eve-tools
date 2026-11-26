@@ -107,6 +107,28 @@ func download(a ghAsset, dir string) (string, error) {
 	return sum, nil
 }
 
+// fetchReleaseAsset downloads the asset called name of the policy
+// repository's release tag into dir and returns its content. found is false
+// when the release has no such asset.
+func (v *verifier) fetchReleaseAsset(tag, name, dir string) (data []byte, found bool, err error) {
+	var rel ghRelease
+	if err := apiGet(fmt.Sprintf("/repos/%s/releases/tags/%s", v.policy.repo, url.PathEscape(tag)), &rel); err != nil {
+		return nil, false, err
+	}
+	if rel.TagName != tag {
+		return nil, false, fmt.Errorf("API returned release %q for tag %q", rel.TagName, tag)
+	}
+	i := slices.IndexFunc(rel.Assets, func(a ghAsset) bool { return a.Name == name })
+	if i < 0 {
+		return nil, false, nil
+	}
+	if _, err := download(rel.Assets[i], dir); err != nil {
+		return nil, true, err
+	}
+	data, err = os.ReadFile(filepath.Join(dir, name))
+	return data, true, err
+}
+
 // releaseOptions selects what verifyReleaseOnline fetches and requires.
 type releaseOptions struct {
 	variants     []string // arch.hv.platform; empty means every sums file

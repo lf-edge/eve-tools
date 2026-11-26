@@ -5,10 +5,12 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -167,5 +169,114 @@ func TestFetchBundle(t *testing.T) {
 	}
 	if _, err := fetchBundle(srv.URL + "/signtest.sha256sums"); err == nil {
 		t.Error("accepted a file that is neither JSON nor snappy")
+	}
+}
+
+// fakeGitHub serves the release API and the asset downloads of repo for
+// releases, a map from tag to asset name to content, and points githubAPI at
+// itself until the test ends.
+func fakeGitHub(t *testing.T, repo string, releases map[string]map[string][]byte) {
+	t.Helper()
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if tag, ok := strings.CutPrefix(r.URL.Path, "/repos/"+repo+"/releases/tags/"); ok {
+			assets, ok := releases[tag]
+			if !ok {
+				http.NotFound(w, r)
+				return
+			}
+			var list []ghAsset
+			for name, data := range assets {
+				list = append(list, ghAsset{Name: name, URL: srv.URL + "/dl/" + tag + "/" + name, Size: int64(len(data))})
+			}
+			json.NewEncoder(w).Encode(ghRelease{TagName: tag, Immutable: true, Assets: list})
+			return
+		}
+		if rest, ok := strings.CutPrefix(r.URL.Path, "/dl/"); ok {
+			tag, name, _ := strings.Cut(rest, "/")
+			if data, ok := releases[tag][name]; ok {
+				w.Write(data)
+				return
+			}
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	saved := githubAPI
+	githubAPI = srv.URL
+	t.Cleanup(func() { githubAPI = saved })
+}
+
+func TestFetchReleaseAsset(t *testing.T) {
+	fakeGitHub(t, forkRepo, map[string]map[string][]byte{
+		"1.0.0": {"a.txt": []byte("alpha")},
+		"2.0.0": {},
+	})
+	v, err := newVerifier(testRoot(t), defaultPolicy(forkRepo, forkSigner))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	data, found, err := v.fetchReleaseAsset("1.0.0", "a.txt", dir)
+	if err != nil || !found || string(data) != "alpha" {
+		t.Fatalf("a.txt of 1.0.0: %q, found %v, %v", data, found, err)
+	}
+	if saved, err := os.ReadFile(filepath.Join(dir, "a.txt")); err != nil || string(saved) != "alpha" {
+		t.Errorf("saved copy %q, %v", saved, err)
+	}
+	if _, found, err := v.fetchReleaseAsset("1.0.0", "b.txt", dir); err != nil || found {
+		t.Errorf("absent asset: found %v, %v; want not found without error", found, err)
+	}
+	if _, found, err := v.fetchReleaseAsset("2.0.0", "a.txt", dir); err != nil || found {
+		t.Errorf("release without assets: found %v, %v; want not found without error", found, err)
+	}
+	if _, _, err := v.fetchReleaseAsset("3.0.0", "a.txt", dir); err == nil || !strings.Contains(err.Error(), "404") {
+		t.Errorf("absent release: error %v, want 404", err)
+	}
+}
+
+// TestReportImagePeople checks what image mode reports from the 9.9.0-rc13
+// tagger statement, which lists taggerImage among its subjects, and the
+// approver's account.
+func TestReportImagePeople(t *testing.T) {
+	bundle, err := os.ReadFile("testdata/9.9.0-rc13.tagger.sigstore.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	taggerAsset := taggerTag + ".tagger.sigstore.json"
+	fakeGitHub(t, forkRepo, map[string]map[string][]byte{
+		taggerTag:  {taggerAsset: bundle},
+		"9.9.0-r1": {"other": []byte("x")},
+		"9.9.0-r2": {"9.9.0-r2.tagger.sigstore.json": []byte("not a bundle")},
+	})
+	signers := parseSigners([]byte("approver approver@example.com\n"+taggerLogin+" tagger@example.com\n"), "list")
+	image := "sha256:" + taggerImage
+	tests := []struct {
+		name    string
+		res     imageResult
+		digest  string
+		signers releaseSigners
+		wantErr string
+	}{
+		{name: "tagger and approver", res: imageResult{tag: taggerTag, commit: taggerCommit, approver: "approver@example.com"}, digest: image, signers: signers},
+		{name: "no approval", res: imageResult{tag: taggerTag, commit: taggerCommit}, digest: image, signers: signers},
+		{name: "tagger approved", res: imageResult{tag: taggerTag, commit: taggerCommit, approver: "tagger@example.com"}, digest: image, signers: signers, wantErr: taggerLogin + " both pushed tag"},
+		{name: "image not covered", res: imageResult{tag: taggerTag, commit: taggerCommit}, digest: "sha256:" + taggerImage[:62] + "00", wantErr: "artifact"},
+		{name: "other commit", res: imageResult{tag: taggerTag, commit: strings.Repeat("0", 40)}, digest: image, wantErr: "names 9.9.0-rc13 at"},
+		{name: "release without tagger statement", res: imageResult{tag: "9.9.0-r1", commit: taggerCommit}, digest: image},
+		{name: "invalid tagger statement", res: imageResult{tag: "9.9.0-r2", commit: taggerCommit}, digest: image, wantErr: "tagger.sigstore.json"},
+		{name: "release not found", res: imageResult{tag: "9.9.0-r3", commit: taggerCommit}, digest: image},
+		{name: "tagger from referrer", res: imageResult{tag: "9.9.0-r2", commit: taggerCommit, tagger: githubUser{Login: taggerLogin, ID: taggerID}, approver: "approver@example.com"}, digest: image, signers: signers},
+		{name: "referrer tagger approved", res: imageResult{tag: "9.9.0-r2", commit: taggerCommit, tagger: githubUser{Login: taggerLogin, ID: taggerID}, approver: "tagger@example.com"}, digest: image, signers: signers, wantErr: taggerLogin + " both pushed tag"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			v, err := newVerifier(testRoot(t), defaultPolicy(forkRepo, forkSigner))
+			if err != nil {
+				t.Fatal(err)
+			}
+			v.signers = tc.signers
+			checkErr(t, v.reportImagePeople(t.TempDir(), tc.digest, tc.res), tc.wantErr)
+		})
 	}
 }
