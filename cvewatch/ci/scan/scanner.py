@@ -31,6 +31,17 @@ OSV_CACHE_TTL_SECONDS = 8 * 3600
 # sentinel to tell a cache miss apart from a cached empty result
 _CACHE_MISS = object()
 
+# linux-firmware has no OSV ecosystem of its own: Debian and Ubuntu track its
+# CVEs under their own source packages. Only the newest release of each is
+# queried: an older release lists a CVE fixed upstream as unfixed, with no fix
+# version to compare an upstream snapshot against. An ecosystem OSV does not
+# know returns no vulns rather than an error, so a mistyped entry reads as clean.
+FIRMWARE_ECOSYSTEM = "linux-firmware"
+FIRMWARE_ADVISORY_STREAMS = (
+    ("firmware-nonfree", "Debian:14"),
+    ("linux-firmware", "Ubuntu:26.04:LTS"),
+)
+
 
 class ScanError(RuntimeError):
     """The scan is incomplete and must not pass a vulnerability gate."""
@@ -62,6 +73,8 @@ def extract_package_info(package, alpine_version=None):
         ecosystem = ecosystems[kind]
     elif kind == "generic" and path.rsplit("/", 1)[-1] in ("kernel", "linux", "linux-kernel"):
         ecosystem = "Linux"
+    elif path == "pkg:generic/linux-firmware":
+        ecosystem = FIRMWARE_ECOSYSTEM
     if kind in ("apk", "deb"):
         origin = qualifiers.get("upstream", [])
         if len(origin) == 1:
@@ -469,6 +482,24 @@ def _query_osv(pkg_info, cache):
     return vulns_data
 
 
+def _query_firmware(pkg_info, cache):
+    """Return the OSV vulns of a linux-firmware package from every stream in
+    FIRMWARE_ADVISORY_STREAMS (dict, possibly empty), or None if any lookup
+    failed. A CVE listed by several streams is returned once, from the first."""
+    merged, seen = [], set()
+    for name, ecosystem in FIRMWARE_ADVISORY_STREAMS:
+        data = _query_osv({**pkg_info, "name": name, "ecosystem": ecosystem, "purl": None}, cache)
+        if data is None:
+            return None
+        for vuln in data.get("vulns", []):
+            ids = {vuln["id"], *(vuln.get("aliases") or []), *(vuln.get("upstream") or [])}
+            if ids & seen:
+                continue
+            seen |= ids
+            merged.append(vuln)
+    return {"vulns": merged} if merged else {}
+
+
 def _write_results(results, output_file):
     """Write the enriched SBOM (scan results) as JSON to `output_file`.
 
@@ -523,6 +554,8 @@ def scan_sbom(sbom_file, cvss_bt_path, alpine_db_path, output_file,
                 if linux_db is None:
                     linux_db = load_linux_kernel_db(osv_cache_dir)
                 data = {"vulns": check_linux_kernel_vulns(match[1], linux_db)}
+            elif info["ecosystem"] == FIRMWARE_ECOSYSTEM:
+                data = _query_firmware(info, cache)
             else:
                 data = _query_osv(info, cache)
             if data is None:

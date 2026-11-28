@@ -151,6 +151,9 @@ Scanner behavior:
 - Scope Alpine queries by container release and source package, and Debian
   queries by release/source package. A flattened list of APKBUILD CVEs is not
   proof that an installed package revision is patched.
+- Look up `pkg:generic/linux-firmware` as the Debian 14 (`firmware-nonfree`)
+  and Ubuntu 26.04 LTS (`linux-firmware`) source packages. A CVE listed by
+  both is reported once.
 - Retry transient OSV errors and expire query results after eight hours. Failed,
   malformed, or incomplete paginated responses are not cached as successes.
 - Add conservative fallback findings only with verified Alpine revision plus
